@@ -1,0 +1,76 @@
+blueprint:
+  name: Zone Presence Lights
+  description: |
+    Version: 2026.8.0
+    
+    Turns lights on when someone enters a zone and off (after a delay)
+    when the zone becomes empty.
+  domain: automation
+  author: NoFutureKid
+  source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/zone_lights.yaml
+  input:
+    required_inputs:
+      name: Required parameters
+      icon: mdi:alert-box
+      description: >
+        These inputs are required for the blueprint to function and must be filled in.
+      collapsed: false
+      input:
+        zone:
+          name: Zone
+          description: Zone to monitor for becoming empty.
+          selector:
+            entity:
+              filter:
+                domain: zone
+        include:
+          name: Inclusions
+          description: List of entities, areas, labels, or devices to include for turning off.
+          selector:
+            target:
+              entity:
+                domain:
+                  - light
+
+    optional_parameters:
+      name: Optional parameters
+      icon: mdi:star-box-multiple
+      description: >
+        Optional parameters to modify the delay before turning off the lights.
+      collapsed: true
+      input:
+        delay:
+          name: Delay
+          description: Time after the zone becomes empty before the automation fires.
+          default: 10
+          selector:
+            number:
+              min: 0
+              max: 60
+              unit_of_measurement: "min"
+              mode: slider
+              step: 1
+
+mode: restart
+
+variables:
+  zone: !input zone
+  delay: !input delay
+  include: !input include
+  filtered_lights: >
+    {% set included_areas = include.area_id | map('area_entities') | sum(start=[]) | default([]) %}
+    {% set included_entities = include.entity_id | default([]) %}
+    {% set included_devices = include.device_id | map('device_entities') | sum(start=[]) | default([]) %}
+    {% set included_labels = include.label_id | map('label_entities') | sum(start=[]) | default([]) %}
+
+trigger:
+  - trigger: numeric_state
+    entity_id: !input zone
+    below: 1
+    for:
+      minutes: !input delay
+
+action:
+  - action: light.turn_off
+    target: >
+      {{ include }}

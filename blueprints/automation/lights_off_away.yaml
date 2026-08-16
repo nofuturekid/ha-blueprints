@@ -1,0 +1,133 @@
+blueprint:
+  name: Lights Off When Away
+  description: |
+    Version: 2026.8.0
+    
+    Turns off the lights when nobody is home, with optional excludes by
+    entity, area or label (e.g. to keep fairylights on).
+  domain: automation
+  author: NoFutureKid
+  source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/lights_off_away.yaml
+  input:
+    required_inputs:
+      name: Required parameters
+      icon: mdi:alert-box
+      description: >
+        These inputs are required for the blueprint to function and must be filled in.
+      collapsed: false
+      input:
+        presence_entity:
+          name: Trigger
+          description: Trigger(s) for starting the automation.
+          selector:
+            entity:
+              multiple: false
+              filter:
+                device_class:
+                  - presence
+                  - occupancy
+                  - motion
+
+    optional_parameters:
+      name: Optional parameters
+      icon: mdi:star-box-multiple
+      description: >
+        Optional parameters to modify the delay and entities which should not be turned off.
+      collapsed: true
+      input:
+        delay:
+          name: Delay
+          description: Time the trigger has to be in 'off' before this fires.
+          default: 10
+          selector:
+            number:
+              min: 0
+              max: 60
+              unit_of_measurement: "min"
+              mode: slider
+              step: 1
+        exclude:
+          name: Exceptions
+          description: List of entities to exclude from turning off.
+          default: []
+          selector:
+            target:
+              entity:
+                domain:
+                  - light
+
+mode: restart
+
+variables:
+  exclude: !input exclude
+  lights_on: >
+    {# Get all lights that are currently "on" #}
+    {% set lights_on = states.light | selectattr('state', 'eq', 'on') | map(attribute='entity_id') | list %}
+    {{ lights_on }}
+  excluded_lights: >
+    {# Extract exclusions from the variables #}
+    {% set exclude_areas = exclude.area_id if exclude.area_id is defined else [] %}
+    {% set exclude_labels = exclude.label_id if exclude.label_id is defined else [] %}
+    {% set exclude_devices = exclude.device_id if exclude.device_id is defined else [] %}
+    {% set exclude_entities = exclude.entity_id if exclude.entity_id is defined else [] %}
+
+    {# Ensure all exclusions are always lists #}
+    {% if exclude_areas is string %}
+      {% set exclude_areas = [exclude_areas] %}
+    {% endif %}
+    {% if exclude_labels is string %}
+      {% set exclude_labels = [exclude_labels] %}
+    {% endif %}
+    {% if exclude_devices is string %}
+      {% set exclude_devices = [exclude_devices] %}
+    {% endif %}
+    {% if exclude_entities is string %}
+      {% set exclude_entities = [exclude_entities] %}
+    {% endif %}
+
+    {# Get excluded entities #}
+    {% set area_excluded_ids = exclude_areas | map('area_entities') | list | sum(start=[]) | unique %}
+    {% set label_excluded_ids = exclude_labels | map('label_entities') | list | sum(start=[]) | unique %}
+    {% set device_excluded_ids = exclude_devices | map('device_entities') | list | sum(start=[]) | unique %}
+
+    {# Combine all exclusions #}
+    {% set excluded_ids = (area_excluded_ids | list) + (label_excluded_ids | list) + (device_excluded_ids | list) + exclude_entities %}
+
+    {# Get lights that are excluded #}
+    {% set excluded_lights = lights_on | select('in', excluded_ids) | list %}
+    {{ excluded_lights }}
+  filtered_lights: >
+    {# Get lights that are not excluded #}
+    {% set filtered_lights = lights_on | reject('in', excluded_lights) | list %}
+    {{ filtered_lights }}
+
+triggers:
+  - trigger: state
+    entity_id: !input presence_entity
+    to: "off"
+    for:
+      minutes: !input delay
+
+actions:
+  - action: logbook.log
+    alias: Log filtered and excluded lights
+    data:
+      name: "Exclusion Log"
+      message: >
+        Lights on:
+        {% for light in lights_on %}
+          - {{ light -}}
+        {% endfor %}
+
+        Lights excluded:
+        {% for light in excluded_lights %}
+          - {{ light -}}
+        {% endfor %}
+
+        Lights to be turned off:
+        {% for light in filtered_lights %}
+          - {{ light -}}
+        {% endfor %}
+  - action: light.turn_off
+    target:
+      entity_id: "{{ filtered_lights }}"

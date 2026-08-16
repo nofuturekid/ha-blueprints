@@ -1,0 +1,213 @@
+blueprint:
+  name: Water Leak Alert
+  description: |
+    Version: 2026.8.0
+    
+    Sends a one-time notification when a water leak or moisture sensor
+    triggers. Separate configuration and texts for leak and moisture
+    sensors; all notification texts are configurable.
+  domain: automation
+  author: NoFutureKid
+  source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/water_leak.yaml
+  input:
+    # ============= REQUIRED INPUTS =============
+    required_inputs:
+      name: Required Inputs
+      icon: mdi:alert-box
+      collapsed: false
+      description: These inputs are required for the blueprint to function.
+      input:
+        water_leak_sensors:
+          name: Water Leak Sensors
+          description: One or more water leak sensors (moisture device_class)
+          default: []
+          selector:
+            entity:
+              filter:
+                - domain: binary_sensor
+                  device_class: moisture
+              multiple: true
+
+        moisture_sensors:
+          name: Moisture Sensors
+          description: One or more moisture sensors (moisture device_class)
+          default: []
+          selector:
+            entity:
+              filter:
+                - domain: binary_sensor
+                  device_class: moisture
+              multiple: true
+
+        notify_devices:
+          name: Notification Devices
+          description: Mobile devices that should receive notifications (mobile_app integration)
+          selector:
+            device:
+              filter:
+                - integration: mobile_app
+              multiple: true
+
+    # ============= MOISTURE CONFIGURATION =============
+    moisture_section:
+      name: "💦 Moisture Settings"
+      icon: mdi:water-percent
+      collapsed: true
+      description: Configure notification for moisture alerts.
+      input:
+        moisture_title:
+          name: Notification Title
+          description: Title for moisture notifications
+          default: "⚠️ MOISTURE DETECTED!"
+          selector:
+            text:
+
+        moisture_message:
+          name: Notification Text
+          description: Message text for moisture notifications (available {{sensor_name}}, {{area_name}})
+          default: "💦 [{{ area_name }}] {{ sensor_name }} detected moisture!"
+          selector:
+            text:
+              multiline: true
+
+        moisture_bypass_dnd:
+          name: Bypass Do Not Disturb
+          description: Ignore quiet hours for moisture notifications
+          default: false
+          selector:
+            boolean:
+
+    # ============= WATER LEAK CONFIGURATION =============
+    water_leak_section:
+      name: "🚨 Water Leak Settings"
+      icon: mdi:water-alert
+      collapsed: true
+      description: Configure notification for water leak alerts.
+      input:
+        water_leak_title:
+          name: Notification Title
+          description: Title for water leak notifications
+          default: "🚨 WATER LEAK DETECTED!"
+          selector:
+            text:
+
+        water_leak_message:
+          name: Notification Text
+          description: Message text for water leak notifications (available {{sensor_name}}, {{area_name}})
+          default: "💧 [{{ area_name }}] {{ sensor_name }} detected a water leak!"
+          selector:
+            text:
+              multiline: true
+
+        water_leak_bypass_dnd:
+          name: Bypass Do Not Disturb
+          description: Ignore quiet hours for critical water leak notifications
+          default: true
+          selector:
+            boolean:
+
+trigger:
+  - platform: state
+    entity_id: !input water_leak_sensors
+    to: "on"
+    id: "water_leak_alarm"
+  - platform: state
+    entity_id: !input moisture_sensors
+    to: "on"
+    id: "moisture_alarm"
+
+action:
+  - variables:
+      sensor_name: "{{ state_attr(trigger.entity_id, 'friendly_name') }}"
+      area_name: "{{ area_name(trigger.entity_id) }}"
+      tag: "alert_{{ trigger.entity_id | replace('.', '_') }}"
+      water_leak_title: !input water_leak_title
+      water_leak_message: !input water_leak_message
+      water_leak_bypass_dnd: !input water_leak_bypass_dnd
+      moisture_title: !input moisture_title
+      moisture_message: !input moisture_message
+      moisture_bypass_dnd: !input moisture_bypass_dnd
+
+  - choose:
+      # MOISTURE ALARM
+      - conditions:
+          - condition: trigger
+            id: "moisture_alarm"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ moisture_bypass_dnd }}"
+                sequence:
+                  - repeat:
+                      for_each: !input notify_devices
+                      sequence:
+                        - service: notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}
+                          data:
+                            title: "{{ moisture_title }}"
+                            message: "{{ moisture_message }}"
+                            data:
+                              tag: "{{ tag }}"
+                              notification_icon: "mdi:water-percent"
+                              importance: high
+                              ttl: 0
+                              priority: high
+                              alerting: true
+                              interruption_level: critical
+            default:
+              - repeat:
+                  for_each: !input notify_devices
+                  sequence:
+                    - service: notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}
+                      data:
+                        title: !input moisture_title
+                        message: "{{ moisture_message }}"
+                        data:
+                          tag: "{{ tag }}"
+                          notification_icon: "mdi:water-percent"
+                          importance: high
+                          ttl: 0
+                          priority: high
+                          alerting: true
+      # WATER LEAK ALARM
+      - conditions:
+          - condition: trigger
+            id: "water_leak_alarm"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ water_leak_bypass_dnd }}"
+                sequence:
+                  - repeat:
+                      for_each: !input notify_devices
+                      sequence:
+                        - service: notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}
+                          data:
+                            title: "{{ water_leak_title }}"
+                            message: "{{ water_leak_message }}"
+                            data:
+                              tag: "{{ tag }}"
+                              notification_icon: "mdi:water-alert"
+                              importance: max
+                              ttl: 0
+                              priority: max
+                              alerting: true
+                              interruption_level: critical
+            default:
+              - repeat:
+                  for_each: !input notify_devices
+                  sequence:
+                    - service: notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}
+                      data:
+                        title: !input water_leak_title
+                        message: "{{ water_leak_message }}"
+                        data:
+                          tag: "{{ tag }}"
+                          notification_icon: "mdi:water-alert"
+                          importance: max
+                          ttl: 0
+                          priority: max
+                          alerting: true
+
+mode: single

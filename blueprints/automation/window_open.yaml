@@ -1,0 +1,223 @@
+blueprint:
+  name: Window Open Alert
+  description: |
+    Version: 2026.8.0
+
+    Notifies when windows stay open longer than a set time, and clears the
+    notification automatically when the window closes. A grace period groups
+    several windows opened in quick succession into one alert. Works with
+    binary_sensor (on/off) and HomeMatic-style window sensors (open/closed/
+    tilted). All notification texts are configurable.
+  domain: automation
+  author: NoFutureKid
+  source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/window_open.yaml
+  input:
+    required_inputs:
+      name: Required Inputs
+      icon: mdi:alert-box
+      collapsed: false
+      description: These inputs are required for the blueprint to function.
+      input:
+        window_entity:
+          name: Window Sensors
+          description: One or more sensors that report the window state.
+          selector:
+            entity:
+              filter:
+                - domain: binary_sensor
+                  device_class: window
+                - domain: binary_sensor
+                  device_class: door
+                - domain: sensor
+              multiple: true
+        notify_devices:
+          name: Notification Devices
+          description: Mobile devices that should receive the notifications.
+          selector:
+            device:
+              filter:
+                - integration: mobile_app
+              multiple: true
+
+    notification_settings:
+      name: Notification Behavior
+      icon: mdi:bell-alert-outline
+      collapsed: false
+      description: Configure how and when notifications are sent.
+      input:
+        duration:
+          name: Time Until Notification
+          description: How long the window must stay open before notifying (minutes).
+          default: 10
+          selector:
+            number:
+              min: 1
+              max: 120
+              step: 1
+              unit_of_measurement: minutes
+              mode: slider
+        notification_group:
+          name: Notification Group
+          description: >
+            Grouping name for the notifications (e.g. "window-kitchen").
+            Lets the phone collapse notifications per room.
+          default: window-alerts
+          selector:
+            text:
+
+    text_settings:
+      name: Notification Texts
+      icon: mdi:message-text
+      collapsed: true
+      description: >
+        Customize the notification texts. Available placeholders:
+        {{ window_name }} and {{ duration }}.
+      input:
+        open_title:
+          name: Title (open)
+          default: "🪟 Window open"
+          selector:
+            text:
+        open_message:
+          name: Message (open)
+          default: "{{ window_name }} has been open for {{ duration }} minutes"
+          selector:
+            text:
+              multiline: true
+        tilted_title:
+          name: Title (tilted)
+          default: "🪟 Window tilted"
+          selector:
+            text:
+        tilted_message:
+          name: Message (tilted)
+          default: "{{ window_name }} has been tilted for {{ duration }} minutes"
+          selector:
+            text:
+              multiline: true
+
+    advanced_settings:
+      name: Advanced Options
+      icon: mdi:cog
+      collapsed: true
+      description: Additional settings for specialized behavior.
+      input:
+        grace_period:
+          name: Grace Period
+          description: >
+            Window for collecting open events (seconds). Several windows opened
+            in quick succession trigger only one notification.
+          default: 30
+          selector:
+            number:
+              min: 0
+              max: 300
+              step: 5
+              unit_of_measurement: seconds
+              mode: slider
+        include_tilted:
+          name: Treat tilted as open
+          description: Should a tilted window also trigger a notification?
+          default: true
+          selector:
+            boolean:
+
+trigger:
+  - platform: state
+    entity_id: !input window_entity
+    to: "on"
+    for:
+      minutes: !input duration
+    id: window_open_binary
+  - platform: state
+    entity_id: !input window_entity
+    to: open
+    for:
+      minutes: !input duration
+    id: window_open_state
+  - platform: state
+    entity_id: !input window_entity
+    to: tilted
+    for:
+      minutes: !input duration
+    id: window_tilted_state
+  - platform: state
+    entity_id: !input window_entity
+    to: "off"
+    id: window_closed_binary
+  - platform: state
+    entity_id: !input window_entity
+    to: closed
+    id: window_closed_state
+
+action:
+  - variables:
+      window_name: "{{ state_attr(trigger.entity_id, 'friendly_name') }}"
+      tag: "window_open_{{ trigger.entity_id | replace('.', '_') }}"
+      duration: !input duration
+      grace_period: !input grace_period
+      notification_group: !input notification_group
+      include_tilted: !input include_tilted
+      open_title: !input open_title
+      open_message: !input open_message
+      tilted_title: !input tilted_title
+      tilted_message: !input tilted_message
+  - choose:
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: window_open_binary
+              - condition: trigger
+                id: window_open_state
+        sequence:
+          - delay:
+              seconds: "{{ grace_period }}"
+          - repeat:
+              for_each: !input notify_devices
+              sequence:
+                - service: notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}
+                  data:
+                    title: "{{ open_title }}"
+                    message: "{{ open_message }}"
+                    data:
+                      tag: "{{ tag }}"
+                      group: "{{ notification_group }}"
+                      notification_icon: mdi:window-open
+      - conditions:
+          - condition: trigger
+            id: window_tilted_state
+          - condition: template
+            value_template: "{{ include_tilted }}"
+        sequence:
+          - delay:
+              seconds: "{{ grace_period }}"
+          - repeat:
+              for_each: !input notify_devices
+              sequence:
+                - service: notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}
+                  data:
+                    title: "{{ tilted_title }}"
+                    message: "{{ tilted_message }}"
+                    data:
+                      tag: "{{ tag }}"
+                      group: "{{ notification_group }}"
+                      notification_icon: mdi:window-open-variant
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: window_closed_binary
+              - condition: trigger
+                id: window_closed_state
+        sequence:
+          - repeat:
+              for_each: !input notify_devices
+              sequence:
+                - service: notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}
+                  data:
+                    message: clear_notification
+                    data:
+                      tag: "{{ tag }}"
+
+mode: restart

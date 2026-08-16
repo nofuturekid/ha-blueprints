@@ -1,0 +1,223 @@
+blueprint:
+  name: Fairylights Schedule
+  description: |
+    Version: 2026.8.0
+    
+    Controls fairylights during the Christmas season (1st Advent to Jan 6).
+    Morning and sunset lights are optional. The evening off-time is split
+    into early_off_days and late_off_days; a vacation sensor can force
+    late_off_days for all days.
+  domain: automation
+  author: NoFutureKid
+  source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/fairylights.yaml
+  input:
+    required_inputs:
+      name: Required parameters
+      icon: mdi:alert-box
+      description: These inputs are required for the automation to function.
+      collapsed: false
+      input:
+        fairylights_morning:
+          name: Morning Fairylights
+          description: Lights turned on in the morning (optional)
+          selector:
+            target:
+              entity:
+                domain: light
+
+        fairylights_sunset:
+          name: Sunset Fairylights
+          description: Lights turned on at sunset
+          selector:
+            target:
+              entity:
+                domain: light
+
+    optional_parameters:
+      name: Optional parameters
+      icon: mdi:star-box-multiple
+      description: Optional parameters with defaults or additional behavior.
+      collapsed: true
+      input:
+        enable_morning:
+          name: Enable morning lights
+          description: Turn on morning lights
+          default: true
+          selector:
+            boolean:
+
+        enable_sunset:
+          name: Enable sunset lights
+          description: Turn on sunset lights at sunset
+          default: true
+          selector:
+            boolean:
+
+        morning_time:
+          name: Morning time
+          description: Time for morning lights to turn on
+          default: "05:00:00"
+          selector:
+            time:
+
+        morning_days:
+          name: Morning days
+          description: Pick weekdays for morning lights
+          default: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+          selector:
+            select:
+              multiple: true
+              options:
+                - "Monday"
+                - "Tuesday"
+                - "Wednesday"
+                - "Thursday"
+                - "Friday"
+                - "Saturday"
+                - "Sunday"
+
+        early_off_time:
+          name: Early off time
+          description: Used on early_off_days
+          default: "21:30:00"
+          selector:
+            time:
+
+        early_off_days:
+          name: Early off days
+          description: Pick weekdays where fairylights should turn off at early_off_time
+          default: ["Monday", "Tuesday", "Wednesday", "Thursday", "Sunday"]
+          selector:
+            select:
+              multiple: true
+              options:
+                - "Monday"
+                - "Tuesday"
+                - "Wednesday"
+                - "Thursday"
+                - "Friday"
+                - "Saturday"
+                - "Sunday"
+
+        late_off_time:
+          name: Late off time
+          description: Used on late_off_days
+          default: "00:30:00"
+          selector:
+            time:
+
+        late_off_days:
+          name: Late off days
+          description: Pick weekdays where fairylights should turn off at late_off_time
+          default: ["Friday", "Saturday"]
+          selector:
+            select:
+              multiple: true
+              options:
+                - "Monday"
+                - "Tuesday"
+                - "Wednesday"
+                - "Thursday"
+                - "Friday"
+                - "Saturday"
+                - "Sunday"
+
+        vacation_sensor:
+          name: Vacation Sensor
+          description: Optional binary_sensor to force late_off_days (holidays)
+          default: {}
+          selector:
+            entity:
+              domain: binary_sensor
+
+variables:
+  morning_days_list: !input morning_days
+  early_off_days_list: !input early_off_days
+  late_off_days_list: !input late_off_days
+
+mode: single
+
+triggers:
+  - platform: time
+    at: !input morning_time
+    id: MORNING
+  - platform: sun
+    event: sunrise
+    id: SUNRISE
+  - platform: sun
+    event: sunset
+    id: SUNSET
+  - platform: time
+    at: !input early_off_time
+    id: OFF_EARLY
+  - platform: time
+    at: !input late_off_time
+    id: OFF_LATE
+
+condition:
+  - condition: template
+    alias: Christmas season check
+    value_template: >
+      {% set today = now().date() %}
+      {% set christmas_day = today.replace(month=12, day=25) %}
+      {% set first_advent =
+        christmas_day - timedelta(days=(christmas_day.weekday() + 1) % 7 + 21)
+      %}
+      {{ today >= first_advent or (today.month == 1 and today.day <= 6) }}
+
+action:
+  - choose:
+      # --- Morning lights ---
+      - conditions:
+          - condition: trigger
+            id: MORNING
+          - condition: template
+            value_template: >
+              {{ enable_morning and now().strftime("%A") in morning_days_list }}
+          - condition: template
+            value_template: >
+              {% set sunrise = state_attr('sun.sun','next_rising') %}
+              {{ sunrise is not none and now() < as_datetime(sunrise) }}
+        sequence:
+          - service: light.turn_on
+            target: !input fairylights_morning
+
+      # --- Sunrise: turn off sunset lights ---
+      - conditions:
+          - condition: trigger
+            id: SUNRISE
+        sequence:
+          - service: light.turn_off
+            target: !input fairylights_sunset
+
+      # --- Sunset lights ---
+      - conditions:
+          - condition: trigger
+            id: SUNSET
+          - condition: template
+            value_template: "{{ enable_sunset }}"
+        sequence:
+          - service: light.turn_on
+            target: !input fairylights_sunset
+
+      # --- Early off day ---
+      - conditions:
+          - condition: trigger
+            id: OFF_EARLY
+          - condition: template
+            value_template: >
+              {{ (vacation_sensor is not defined or vacation_sensor.state != 'on') and now().strftime("%A") in early_off_days_list }}
+        sequence:
+          - service: light.turn_off
+            target: !input fairylights_sunset
+
+      # --- Late off day ---
+      - conditions:
+          - condition: trigger
+            id: OFF_LATE
+          - condition: template
+            value_template: >
+              {{ now().strftime("%A") in late_off_days_list or (vacation_sensor is defined and vacation_sensor.state == 'on') }}
+        sequence:
+          - service: light.turn_off
+            target: !input fairylights_sunset

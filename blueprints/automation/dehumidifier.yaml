@@ -1,0 +1,176 @@
+blueprint:
+  name: Dehumidifier Control
+  description: |
+    Version: 2026.8.0
+    
+    Controls a dehumidifier from a humidity sensor with adjustable
+    daytime and nighttime thresholds. Turns on when humidity exceeds the
+    upper limit and off when it drops below the lower limit.
+  domain: automation
+  author: NoFutureKid
+  source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/dehumidifier.yaml
+  homeassistant:
+    min_version: "2024.6.0"
+  input:
+    required_inputs:
+      name: Dehumidifier and humidity entity
+      icon: mdi:alert-box
+      collapsed: false
+      description: >
+        These inputs are required for the blueprint to function and must be filled in.
+      input:
+        dehumidifier:
+          name: Dehumidifier
+          description: "Select a dehumidifier or switch entity to control."
+          selector:
+            entity:
+              multiple: false
+              filter:
+                - domain: switch
+                - integration: humidifier
+        humidity_sensor:
+          name: Humidity Sensor
+          description: "Select a humidity sensor."
+          selector:
+            entity:
+              filter:
+                - domain: sensor
+                - device_class: humidity
+
+    daytime_settings:
+      name: Daytime settings
+      icon: mdi:sun-clock
+      collapsed: true
+      description: >
+        These inputs are required, but have values that are defaulted to values that work for me.
+          It is possible you will need to change them.
+          My suggestion is to not change them until you detect an issue that you think can be
+          fixed by changing these.
+      input:
+        daytime_start:
+          name: Daytime Start
+          description: "Start time for the daytime period (e.g., 08:00)."
+          selector:
+            time:
+          default: "08:00:00"
+        min_humidity_day:
+          name: Minimum Humidity (Day)
+          description: "Minimum humidity level to turn off the dehumidifier during the daytime."
+          selector:
+            number:
+              min: 30
+              max: 80
+              unit_of_measurement: "%"
+          default: 48
+        max_humidity_day:
+          name: Maximum Humidity (Day)
+          description: "Maximum humidity level to turn on the dehumidifier during the daytime."
+          selector:
+            number:
+              min: 30
+              max: 80
+              unit_of_measurement: "%"
+          default: 55
+
+    nighttime_settings:
+      name: Nighttime settings
+      icon: mdi:weather-night
+      collapsed: true
+      description: >
+        These inputs are required, but have values that are defaulted to values that work for me.
+          It is possible you will need to change them.
+          My suggestion is to not change them until you detect an issue that you think can be
+          fixed by changing these.
+      input:
+        nighttime_start:
+          name: Nighttime Start
+          description: "Start time for the nighttime period (e.g., 21:00)."
+          selector:
+            time:
+          default: "21:00:00"
+        min_humidity_night:
+          name: Minimum Humidity (Night)
+          description: "Minimum humidity level to turn off the dehumidifier during the nighttime."
+          selector:
+            number:
+              min: 30
+              max: 80
+              unit_of_measurement: "%"
+          default: 55
+        max_humidity_night:
+          name: Maximum Humidity (Night)
+          description: "Maximum humidity level to turn on the dehumidifier during the nighttime."
+          selector:
+            number:
+              min: 30
+              max: 80
+              unit_of_measurement: "%"
+          default: 60
+
+mode: single
+
+triggers:
+  - trigger: state
+    entity_id: !input humidity_sensor
+  - trigger: time
+    at: !input daytime_start
+  - trigger: time
+    at: !input nighttime_start
+  - trigger: homeassistant
+    event: start
+
+actions:
+  - if:
+      - condition: time
+        after: !input daytime_start
+        before: !input nighttime_start
+    then:
+      - choose:
+          - conditions:
+              - condition: numeric_state
+                entity_id: !input humidity_sensor
+                below: !input min_humidity_day
+              - condition: state
+                state: "on"
+                entity_id: !input dehumidifier
+            sequence:
+              - action: homeassistant.turn_off
+                target:
+                  entity_id: !input dehumidifier
+          - conditions:
+              - condition: numeric_state
+                entity_id: !input humidity_sensor
+                above: !input max_humidity_day
+              - condition: state
+                state: "off"
+                entity_id: !input dehumidifier
+            sequence:
+              - action: homeassistant.turn_on
+                target:
+                  entity_id: !input dehumidifier
+        default: []
+    else:
+      - choose:
+          - conditions:
+              - condition: numeric_state
+                entity_id: !input humidity_sensor
+                below: !input min_humidity_night
+              - condition: state
+                entity_id: !input dehumidifier
+                state: "on"
+            sequence:
+              - action: homeassistant.turn_off
+                target:
+                  entity_id: !input dehumidifier
+          - conditions:
+              - condition: numeric_state
+                entity_id: !input humidity_sensor
+                above: !input max_humidity_night
+              - condition: state
+                state: "off"
+                entity_id: !input dehumidifier
+            sequence:
+              - action: homeassistant.turn_on
+                target:
+                  entity_id: !input dehumidifier
+        default: []
