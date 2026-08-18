@@ -1,8 +1,8 @@
 blueprint:
   name: Water Leak Alert
   description: |
-    Version: 2026.8.0
-    
+    Version: 2026.8.1
+
     Sends a one-time notification when a water leak or moisture sensor
     triggers. Separate configuration and texts for leak and moisture
     sensors; all notification texts are configurable.
@@ -151,6 +151,11 @@ action:
                               notification_icon: "mdi:water-percent"
                               importance: high
                               ttl: 0
+                              # priority is the FCM delivery priority and only
+                              # accepts normal/high - "max" is silently treated
+                              # as normal, which with ttl: 0 means the message
+                              # is DROPPED while the phone dozes (measured
+                              # 2026-08-18). Channel loudness is "importance".
                               priority: high
                               alerting: true
                               interruption_level: critical
@@ -191,7 +196,7 @@ action:
                               notification_icon: "mdi:water-alert"
                               importance: max
                               ttl: 0
-                              priority: max
+                              priority: high
                               alerting: true
                               interruption_level: critical
             default:
@@ -207,7 +212,7 @@ action:
                           notification_icon: "mdi:water-alert"
                           importance: max
                           ttl: 0
-                          priority: max
+                          priority: high
                           alerting: true
 
 mode: single
