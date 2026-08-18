@@ -1,133 +1,240 @@
 blueprint:
-  name: Climate Workday Schedule
+  name: Climate Day/Night Schedule
   description: |
-    Version: 2026.8.0
-    
-    Applies a climate setting (HVAC mode + target temperature) at two
-    configurable times: one for when a workday binary sensor is ON, and
-    one for when it is OFF. Pair with a "today" workday sensor for a
-    morning schedule or a "tomorrow" sensor for an evening schedule.
-    Optionally turns some switches on and others off. Create one
-    automation per mode (e.g. Day Mode and Night Mode).
+    Version: 2026.8.1
+
+    Applies a day and a night climate setting (HVAC mode + target
+    temperature) from a single automation. Each mode switches at one of
+    two configurable times, picked by a workday binary sensor: pair the
+    day mode with a "today" sensor and the night mode with a "tomorrow"
+    sensor, so an early start only happens when it is actually needed.
+    Each mode can optionally turn some switches on and others off.
   domain: automation
   author: NoFutureKid
   source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/climate_workday.yaml
+  homeassistant:
+    min_version: "2024.10.0"
   input:
-    climate_entity:
-      name: Climate device
-      selector:
-        entity:
-          filter:
-            domain: climate
-    workday_sensor:
-      name: Workday sensor
-      description: >
-        Binary sensor that is "on" when the relevant day is a workday.
-        Use a "today" sensor for a morning schedule, a "tomorrow" sensor
-        for an evening schedule.
-      selector:
-        entity:
-          filter:
-            domain: binary_sensor
-    time_workday:
-      name: Time when workday sensor is ON
-      default: "21:00:00"
-      selector:
-        time: {}
-    time_dayoff:
-      name: Time when workday sensor is OFF
-      default: "22:00:00"
-      selector:
-        time: {}
-    hvac_mode:
-      name: HVAC mode
-      default: cool
-      selector:
-        select:
-          options:
-            - "off"
-            - cool
-            - heat
-            - dry
-            - fan_only
-            - auto
-            - heat_cool
-    temperature:
-      name: Target temperature
-      default: 19
-      selector:
-        number:
-          min: 12
-          max: 30
-          step: 0.5
-          unit_of_measurement: "°C"
-    switches_on:
-      name: Switches to turn ON (optional)
-      default: []
-      selector:
-        entity:
-          filter:
-            domain: switch
-          multiple: true
-    switches_off:
-      name: Switches to turn OFF (optional)
-      default: []
-      selector:
-        entity:
-          filter:
-            domain: switch
-          multiple: true
+    device:
+      name: Device
+      icon: mdi:air-conditioner
+      input:
+        climate_entity:
+          name: Climate device
+          selector:
+            entity:
+              filter:
+                domain: climate
+        hvac_mode:
+          name: HVAC mode
+          description: Applied for both day and night.
+          default: cool
+          selector:
+            select:
+              options:
+                - "off"
+                - cool
+                - heat
+                - dry
+                - fan_only
+                - auto
+                - heat_cool
+    day:
+      name: Day mode
+      icon: mdi:weather-sunny
+      input:
+        day_workday_sensor:
+          name: Workday sensor (today)
+          description: >
+            Binary sensor that is "on" when today is a workday.
+          selector:
+            entity:
+              filter:
+                domain: binary_sensor
+        day_time_workday:
+          name: Time when today is a workday
+          default: "06:30:00"
+          selector:
+            time: {}
+        day_time_dayoff:
+          name: Time when today is a day off
+          default: "09:00:00"
+          selector:
+            time: {}
+        day_temperature:
+          name: Target temperature
+          default: 23
+          selector:
+            number:
+              min: 12
+              max: 30
+              step: 0.5
+              unit_of_measurement: "°C"
+        day_switches_on:
+          name: Switches to turn ON (optional)
+          default: []
+          selector:
+            entity:
+              filter:
+                domain: switch
+              multiple: true
+        day_switches_off:
+          name: Switches to turn OFF (optional)
+          default: []
+          selector:
+            entity:
+              filter:
+                domain: switch
+              multiple: true
+    night:
+      name: Night mode
+      icon: mdi:weather-night
+      input:
+        night_workday_sensor:
+          name: Workday sensor (tomorrow)
+          description: >
+            Binary sensor that is "on" when tomorrow is a workday.
+          selector:
+            entity:
+              filter:
+                domain: binary_sensor
+        night_time_workday:
+          name: Time when tomorrow is a workday
+          default: "21:00:00"
+          selector:
+            time: {}
+        night_time_dayoff:
+          name: Time when tomorrow is a day off
+          default: "22:00:00"
+          selector:
+            time: {}
+        night_temperature:
+          name: Target temperature
+          default: 19
+          selector:
+            number:
+              min: 12
+              max: 30
+              step: 0.5
+              unit_of_measurement: "°C"
+        night_switches_on:
+          name: Switches to turn ON (optional)
+          default: []
+          selector:
+            entity:
+              filter:
+                domain: switch
+              multiple: true
+        night_switches_off:
+          name: Switches to turn OFF (optional)
+          default: []
+          selector:
+            entity:
+              filter:
+                domain: switch
+              multiple: true
 
 mode: single
 
+# !input cannot be used inside a Jinja expression, so the switch lists are
+# bound to variables first and the templates below reference those.
 variables:
-  switches_on: !input switches_on
-  switches_off: !input switches_off
+  day_switches_on: !input day_switches_on
+  day_switches_off: !input day_switches_off
+  night_switches_on: !input night_switches_on
+  night_switches_off: !input night_switches_off
 
 triggers:
   - trigger: time
-    at: !input time_workday
-    id: workday
+    at: !input day_time_workday
+    id: day_workday
   - trigger: time
-    at: !input time_dayoff
-    id: dayoff
-
-conditions:
-  - condition: or
-    conditions:
-      - condition: and
-        conditions:
-          - condition: trigger
-            id: workday
-          - condition: state
-            entity_id: !input workday_sensor
-            state: "on"
-      - condition: and
-        conditions:
-          - condition: trigger
-            id: dayoff
-          - condition: state
-            entity_id: !input workday_sensor
-            state: "off"
+    at: !input day_time_dayoff
+    id: day_dayoff
+  - trigger: time
+    at: !input night_time_workday
+    id: night_workday
+  - trigger: time
+    at: !input night_time_dayoff
+    id: night_dayoff
 
 actions:
-  - action: climate.set_hvac_mode
-    target:
-      entity_id: !input climate_entity
-    data:
-      hvac_mode: !input hvac_mode
-  - action: climate.set_temperature
-    target:
-      entity_id: !input climate_entity
-    data:
-      temperature: !input temperature
-  - if: "{{ switches_on | count > 0 }}"
-    then:
-      - action: switch.turn_on
-        target:
-          entity_id: "{{ switches_on }}"
-  - if: "{{ switches_off | count > 0 }}"
-    then:
-      - action: switch.turn_off
-        target:
-          entity_id: "{{ switches_off }}"
+  - choose:
+      - alias: Day mode
+        conditions:
+          - condition: or
+            conditions:
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id: day_workday
+                  - condition: state
+                    entity_id: !input day_workday_sensor
+                    state: "on"
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id: day_dayoff
+                  - condition: state
+                    entity_id: !input day_workday_sensor
+                    state: "off"
+        sequence:
+          - action: climate.set_hvac_mode
+            target:
+              entity_id: !input climate_entity
+            data:
+              hvac_mode: !input hvac_mode
+          - action: climate.set_temperature
+            target:
+              entity_id: !input climate_entity
+            data:
+              temperature: !input day_temperature
+          - if: "{{ day_switches_on | count > 0 }}"
+            then:
+              - action: switch.turn_on
+                target:
+                  entity_id: "{{ day_switches_on }}"
+          - if: "{{ day_switches_off | count > 0 }}"
+            then:
+              - action: switch.turn_off
+                target:
+                  entity_id: "{{ day_switches_off }}"
+      - alias: Night mode
+        conditions:
+          - condition: or
+            conditions:
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id: night_workday
+                  - condition: state
+                    entity_id: !input night_workday_sensor
+                    state: "on"
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id: night_dayoff
+                  - condition: state
+                    entity_id: !input night_workday_sensor
+                    state: "off"
+        sequence:
+          - action: climate.set_hvac_mode
+            target:
+              entity_id: !input climate_entity
+            data:
+              hvac_mode: !input hvac_mode
+          - action: climate.set_temperature
+            target:
+              entity_id: !input climate_entity
+            data:
+              temperature: !input night_temperature
+          - if: "{{ night_switches_on | count > 0 }}"
+            then:
+              - action: switch.turn_on
+                target:
+                  entity_id: "{{ night_switches_on }}"
+          - if: "{{ night_switches_off | count > 0 }}"
+            then:
+              - action: switch.turn_off
+                target:
+                  entity_id: "{{ night_switches_off }}"
