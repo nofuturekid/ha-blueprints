@@ -1,11 +1,23 @@
 blueprint:
   name: Water Leak Alert
   description: |
-    Version: 2026.8.1
+    Version: 2026.8.2
 
     Sends a one-time notification when a water leak or moisture sensor
     triggers. Separate configuration and texts for leak and moisture
     sensors; all notification texts are configurable.
+
+    Delivery notes (measured 2026-08-18):
+    - "priority" is the FCM delivery priority and only accepts normal and
+      high. Anything else (e.g. max) counts as normal and will NOT wake a
+      dozing phone. Channel loudness is "importance", where max is valid.
+    - No "ttl" is set on purpose. ttl: 0 means "deliver now or discard",
+      so an alert would be lost entirely whenever the phone happens to be
+      out of coverage. For a leak, late is far better than never.
+    - Android only overrides Do Not Disturb per notification channel, and
+      that override has to be granted once on the device itself. Set a
+      channel name below, then allow "Override Do Not Disturb" for that
+      channel under Settings > Apps > Home Assistant > Notifications.
   domain: automation
   author: NoFutureKid
   source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/water_leak.yaml
@@ -71,11 +83,20 @@ blueprint:
               multiline: true
 
         moisture_bypass_dnd:
-          name: Bypass Do Not Disturb
-          description: Ignore quiet hours for moisture notifications
+          name: Use a dedicated notification channel
+          description: >
+            Sends moisture alerts on their own Android notification channel,
+            so you can grant it "Override Do Not Disturb" on the device.
           default: false
           selector:
             boolean:
+
+        moisture_channel:
+          name: Channel name
+          description: Only used when the dedicated channel is enabled above.
+          default: "Moisture"
+          selector:
+            text:
 
     # ============= WATER LEAK CONFIGURATION =============
     water_leak_section:
@@ -100,9 +121,28 @@ blueprint:
               multiline: true
 
         water_leak_bypass_dnd:
-          name: Bypass Do Not Disturb
-          description: Ignore quiet hours for critical water leak notifications
+          name: Use a dedicated notification channel
+          description: >
+            Sends leak alerts on their own Android notification channel, so
+            you can grant it "Override Do Not Disturb" on the device.
           default: true
+          selector:
+            boolean:
+
+        water_leak_channel:
+          name: Channel name
+          description: Only used when the dedicated channel is enabled above.
+          default: "Water Leak"
+          selector:
+            text:
+
+        water_leak_tts:
+          name: Also speak the alert out loud
+          description: >
+            Sends an additional text-to-speech notification over the alarm
+            stream at maximum volume, which is audible even when the ringer
+            is silenced. Leak alerts only.
+          default: false
           selector:
             boolean:
 
@@ -124,9 +164,12 @@ action:
       water_leak_title: !input water_leak_title
       water_leak_message: !input water_leak_message
       water_leak_bypass_dnd: !input water_leak_bypass_dnd
+      water_leak_channel: !input water_leak_channel
+      water_leak_tts: !input water_leak_tts
       moisture_title: !input moisture_title
       moisture_message: !input moisture_message
       moisture_bypass_dnd: !input moisture_bypass_dnd
+      moisture_channel: !input moisture_channel
 
   - choose:
       # MOISTURE ALARM
@@ -149,15 +192,9 @@ action:
                             data:
                               tag: "{{ tag }}"
                               notification_icon: "mdi:water-percent"
+                              channel: "{{ moisture_channel }}"
                               importance: high
-                              ttl: 0
-                              # priority is the FCM delivery priority and only
-                              # accepts normal/high - "max" is silently treated
-                              # as normal, which with ttl: 0 means the message
-                              # is DROPPED while the phone dozes (measured
-                              # 2026-08-18). Channel loudness is "importance".
                               priority: high
-                              alerting: true
                               interruption_level: critical
             default:
               - repeat:
@@ -165,15 +202,13 @@ action:
                   sequence:
                     - service: notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}
                       data:
-                        title: !input moisture_title
+                        title: "{{ moisture_title }}"
                         message: "{{ moisture_message }}"
                         data:
                           tag: "{{ tag }}"
                           notification_icon: "mdi:water-percent"
                           importance: high
-                          ttl: 0
                           priority: high
-                          alerting: true
       # WATER LEAK ALARM
       - conditions:
           - condition: trigger
@@ -194,10 +229,9 @@ action:
                             data:
                               tag: "{{ tag }}"
                               notification_icon: "mdi:water-alert"
+                              channel: "{{ water_leak_channel }}"
                               importance: max
-                              ttl: 0
                               priority: high
-                              alerting: true
                               interruption_level: critical
             default:
               - repeat:
@@ -205,14 +239,26 @@ action:
                   sequence:
                     - service: notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}
                       data:
-                        title: !input water_leak_title
+                        title: "{{ water_leak_title }}"
                         message: "{{ water_leak_message }}"
                         data:
                           tag: "{{ tag }}"
                           notification_icon: "mdi:water-alert"
                           importance: max
-                          ttl: 0
                           priority: high
-                          alerting: true
+          # Spoken alert over the alarm stream - leak only, and audible even
+          # when the ringer is silenced. Sent in addition to the notification
+          # above, not instead of it.
+          - if: "{{ water_leak_tts }}"
+            then:
+              - repeat:
+                  for_each: !input notify_devices
+                  sequence:
+                    - service: notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}
+                      data:
+                        message: TTS
+                        data:
+                          tts_text: "{{ water_leak_message }}"
+                          media_stream: alarm_stream_max
 
 mode: single
