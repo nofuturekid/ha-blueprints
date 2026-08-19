@@ -2,7 +2,7 @@ blueprint:
   name: Climate Day/Night Schedule
   description: |
     # Climate Day/Night Schedule
-    **Version: 2026.8.2**
+    **Version: 2026.8.3**
 
     Applies a day and a night climate setting from a single automation, each
     switching at a time picked by a workday sensor.
@@ -27,6 +27,8 @@ blueprint:
       input:
         climate_entity:
           name: Climate device
+          description: >
+            The climate device this schedule controls.
           selector:
             entity:
               filter:
@@ -59,16 +61,22 @@ blueprint:
                 domain: binary_sensor
         day_time_workday:
           name: Time when today is a workday
+          description: >
+            When day mode starts if the workday sensor says today is a working day.
           default: "06:30:00"
           selector:
             time: {}
         day_time_dayoff:
           name: Time when today is a day off
+          description: >
+            When day mode starts on a day off. Usually later than the workday time.
           default: "09:00:00"
           selector:
             time: {}
         day_temperature:
           name: Target temperature
+          description: >
+            Target temperature for day mode.
           default: 23
           selector:
             number:
@@ -78,6 +86,8 @@ blueprint:
               unit_of_measurement: "°C"
         day_switches_on:
           name: Switches to turn ON (optional)
+          description: >
+            Switches to turn on when day mode starts.
           default: []
           selector:
             entity:
@@ -86,6 +96,8 @@ blueprint:
               multiple: true
         day_switches_off:
           name: Switches to turn OFF (optional)
+          description: >
+            Switches to turn off when day mode starts.
           default: []
           selector:
             entity:
@@ -106,16 +118,22 @@ blueprint:
                 domain: binary_sensor
         night_time_workday:
           name: Time when tomorrow is a workday
+          description: >
+            When night mode starts if the workday sensor says tomorrow is a working day. Usually earlier, so you get a full night.
           default: "21:00:00"
           selector:
             time: {}
         night_time_dayoff:
           name: Time when tomorrow is a day off
+          description: >
+            When night mode starts if tomorrow is a day off.
           default: "22:00:00"
           selector:
             time: {}
         night_temperature:
           name: Target temperature
+          description: >
+            Target temperature for night mode.
           default: 19
           selector:
             number:
@@ -125,6 +143,8 @@ blueprint:
               unit_of_measurement: "°C"
         night_switches_on:
           name: Switches to turn ON (optional)
+          description: >
+            Switches to turn on when night mode starts.
           default: []
           selector:
             entity:
@@ -133,6 +153,8 @@ blueprint:
               multiple: true
         night_switches_off:
           name: Switches to turn OFF (optional)
+          description: >
+            Switches to turn off when night mode starts.
           default: []
           selector:
             entity:

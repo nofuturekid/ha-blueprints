@@ -2,7 +2,7 @@ blueprint:
   name: Window Open Alert
   description: |
     # Window Open Alert
-    **Version: 2026.8.1**
+    **Version: 2026.8.2**
 
     Notifies when a window stays open longer than a set time, and clears the
     notification again when it closes.
@@ -83,22 +83,30 @@ blueprint:
       input:
         open_title:
           name: Title (open)
+          description: >
+            Notification title for a fully opened window.
           default: "🪟 Window open"
           selector:
             text:
         open_message:
           name: Message (open)
+          description: >
+            Notification text for a fully opened window. {{ window_name }} and {{ duration }} are available.
           default: "{{ window_name }} has been open for {{ duration }} minutes"
           selector:
             text:
               multiline: true
         tilted_title:
           name: Title (tilted)
+          description: >
+            Notification title for a tilted window.
           default: "🪟 Window tilted"
           selector:
             text:
         tilted_message:
           name: Message (tilted)
+          description: >
+            Notification text for a tilted window. {{ window_name }} and {{ duration }} are available.
           default: "{{ window_name }} has been tilted for {{ duration }} minutes"
           selector:
             text:
