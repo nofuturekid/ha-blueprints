@@ -1,10 +1,11 @@
 blueprint:
   name: Zone Presence Lights
   description: |
-    Version: 2026.8.0
-    
-    Turns lights on when someone enters a zone and off (after a delay)
-    when the zone becomes empty.
+    # Zone Presence Lights
+    **Version: 2026.8.1**
+
+    Turns lights on when someone enters a zone and off, after a delay, when the
+    zone becomes empty.
   domain: automation
   author: NoFutureKid
   source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/zone_lights.yaml

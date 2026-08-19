@@ -1,14 +1,20 @@
 blueprint:
   name: Climate Day/Night Schedule
   description: |
-    Version: 2026.8.1
+    # Climate Day/Night Schedule
+    **Version: 2026.8.2**
 
-    Applies a day and a night climate setting (HVAC mode + target
-    temperature) from a single automation. Each mode switches at one of
-    two configurable times, picked by a workday binary sensor: pair the
-    day mode with a "today" sensor and the night mode with a "tomorrow"
-    sensor, so an early start only happens when it is actually needed.
+    Applies a day and a night climate setting from a single automation, each
+    switching at a time picked by a workday sensor.
+
+    <details><summary><b>Details</b></summary>
+
+    Pair the day mode with a "today" workday sensor and the night mode with a
+    "tomorrow" sensor, so an early start only happens when it is actually needed.
+
     Each mode can optionally turn some switches on and others off.
+
+    </details>
   domain: automation
   author: NoFutureKid
   source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/climate_workday.yaml

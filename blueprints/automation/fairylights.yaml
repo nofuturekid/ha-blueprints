@@ -1,12 +1,20 @@
 blueprint:
   name: Fairylights Schedule
   description: |
-    Version: 2026.8.0
-    
-    Controls fairylights during the Christmas season (1st Advent to Jan 6).
-    Morning and sunset lights are optional. The evening off-time is split
-    into early_off_days and late_off_days; a vacation sensor can force
-    late_off_days for all days.
+    # Fairylights Schedule
+    **Version: 2026.8.1**
+
+    Controls fairylights through the Christmas season, from 1st Advent to
+    January 6th.
+
+    <details><summary><b>Details</b></summary>
+
+    Morning and sunset lights are optional.
+
+    The evening off-time is split into early and late days, so weekends can run
+    longer. A vacation sensor can force late days throughout.
+
+    </details>
   domain: automation
   author: NoFutureKid
   source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/fairylights.yaml

@@ -1,19 +1,24 @@
 blueprint:
   name: Lights On When Dark
   description: |
-    Version: 2026.8.2
+    # Lights On When Dark
+    **Version: 2026.8.3**
 
-    Runs actions when it actually gets dark, measured by an illuminance
-    sensor instead of guessed from sun elevation.
+    Runs actions when it actually gets dark, measured by an illuminance sensor
+    instead of guessed from sun elevation.
 
-    Check how often your sensor reports before tuning anything else.
-    Many battery sensors send brightness only every few minutes, or
-    only alongside motion. A slow sensor needs a higher threshold and a
-    shorter dwell: with sparse readings the dwell adds delay without
-    filtering clouds.
+    <details><summary><b>Details</b></summary>
 
-    Sunset acts as a fallback whenever the sensor cannot be trusted —
-    unavailable, or silent for longer than "Stale after".
+    Check how often your sensor reports before tuning anything else. Many battery
+    sensors send brightness only every few minutes, or only alongside motion.
+
+    A slow sensor needs a higher threshold and a shorter dwell: with sparse
+    readings the dwell adds delay without filtering clouds.
+
+    Sunset acts as a fallback whenever the sensor cannot be trusted - unavailable,
+    or silent for longer than "Stale after".
+
+    </details>
   domain: automation
   author: NoFutureKid
   source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/lights_on_dark.yaml

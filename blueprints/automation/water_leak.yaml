@@ -1,23 +1,28 @@
 blueprint:
   name: Water Leak Alert
   description: |
-    Version: 2026.8.3
+    # Water Leak Alert
+    **Version: 2026.8.4**
 
-    Sends a one-time notification when a water leak or moisture sensor
-    triggers. Separate configuration and texts for leak and moisture
-    sensors; all notification texts are configurable.
+    Sends a one-time notification when a water leak or moisture sensor triggers,
+    with separate settings and texts for each.
 
-    Delivery notes (measured 2026-08-18):
-    - "priority" is the FCM delivery priority and only accepts normal and
-      high. Anything else (e.g. max) counts as normal and will NOT wake a
-      dozing phone. Channel loudness is "importance", where max is valid.
-    - No "ttl" is set on purpose. ttl: 0 means "deliver now or discard",
-      so an alert would be lost entirely whenever the phone happens to be
-      out of coverage. For a leak, late is far better than never.
-    - Android only overrides Do Not Disturb per notification channel, and
-      that override has to be granted once on the device itself. Set a
-      channel name below, then allow "Override Do Not Disturb" for that
-      channel under Settings > Apps > Home Assistant > Notifications.
+    <details><summary><b>Notification delivery</b></summary>
+
+    "priority" is the FCM delivery priority and accepts only normal and high.
+    Anything else counts as normal and will not wake a dozing phone. Channel
+    loudness is "importance", where max is valid.
+
+    No "ttl" is set on purpose: ttl 0 means deliver now or discard, so an alert
+    would be lost whenever the phone is out of coverage. For a leak, late beats
+    never.
+
+    Android overrides Do Not Disturb per notification channel, and that override
+    has to be granted once on the device. Set a channel name below, then allow
+    "Override Do Not Disturb" for it under Settings > Apps > Home Assistant >
+    Notifications.
+
+    </details>
   domain: automation
   author: NoFutureKid
   source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/water_leak.yaml

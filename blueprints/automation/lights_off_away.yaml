@@ -1,10 +1,11 @@
 blueprint:
   name: Lights Off When Away
   description: |
-    Version: 2026.8.0
-    
-    Turns off the lights when nobody is home, with optional excludes by
-    entity, area or label (e.g. to keep fairylights on).
+    # Lights Off When Away
+    **Version: 2026.8.1**
+
+    Turns off the lights when nobody is home. Entities, areas or labels can be
+    excluded, for example to keep fairylights on.
   domain: automation
   author: NoFutureKid
   source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/lights_off_away.yaml

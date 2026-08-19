@@ -1,10 +1,10 @@
 blueprint:
   name: Restart Notification
   description: |
-    Version: 2026.8.0
-    
-    Sends a notification to selected devices when Home Assistant starts
-    or shuts down.
+    # Restart Notification
+    **Version: 2026.8.1**
+
+    Notifies the selected devices when Home Assistant starts or shuts down.
   domain: automation
   author: NoFutureKid
   source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/restart_notification.yaml
