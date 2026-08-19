@@ -1,15 +1,15 @@
 blueprint:
   name: Lights On When Dark
   description: |
-    Version: 2026.8.0
+    Version: 2026.8.1
 
     Runs actions when it actually gets dark, measured by an illuminance
     sensor rather than guessed from sun elevation. A dwell time rides out
     passing clouds, so a single overcast minute does not trigger it.
 
-    Sunset is available as a fallback, but only fires when the sensor is
-    unavailable — otherwise a sensor hosted on a bridge that drops out
-    would silently leave the actions unrun.
+    Sunset is available as a fallback for when the sensor cannot be
+    trusted — see "Stale after" below for the second, nastier way that
+    happens.
 
     Check how often your sensor actually reports before tuning anything
     else. This dominates both settings below and is easy to overlook.
@@ -128,16 +128,40 @@ blueprint:
         use_sunset_fallback:
           name: Sunset fallback
           description: >
-            Also run at sunset, but only while the illuminance sensor is
-            unavailable. Protects against a sensor whose bridge drops out.
+            Also run at sunset, but only while the illuminance sensor cannot be
+            trusted. Protects against a sensor whose bridge drops out.
           default: true
           selector:
             boolean:
+
+        stale_after:
+          name: Stale after
+          description: >
+            Treat the sensor as untrustworthy once its last report is older
+            than this, so the sunset fallback takes over. Guards against the
+            worst failure mode: a sensor that stops transmitting but keeps
+            its last value, so it never goes 'unavailable' and the threshold
+            is never crossed again — nothing runs and nothing looks wrong.
+            Reported for Aqara GZCGQ11LM after 3-6 months of use. Set this to
+            a few times your sensor's normal reporting gap; 0 disables the
+            check. Note it uses last_reported, which is re-stamped on every
+            Home Assistant restart, so a dead sensor looks fresh again right
+            after a restart.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 720
+              unit_of_measurement: "min"
+              mode: box
+              step: 1
 
 mode: single
 
 variables:
   presence_entity: !input presence_entity
+  illuminance_entity: !input illuminance_entity
+  stale_after: !input stale_after
 
 triggers:
   - trigger: numeric_state
@@ -173,7 +197,7 @@ conditions:
       {% endif %}
 
   - condition: or
-    alias: Darkness measured, or sunset while the sensor is missing
+    alias: Darkness measured, or sunset while the sensor cannot be trusted
     conditions:
       - condition: trigger
         id: dark
@@ -181,11 +205,26 @@ conditions:
         conditions:
           - condition: trigger
             id: sunset_fallback
-          - condition: state
-            alias: Only when the sensor cannot be read
-            entity_id: !input illuminance_entity
-            state:
-              - unavailable
-              - unknown
+          - condition: or
+            alias: Sensor unreadable, or its last report is too old
+            conditions:
+              - condition: state
+                entity_id: !input illuminance_entity
+                state:
+                  - unavailable
+                  - unknown
+              - condition: template
+                alias: Sensor went stale without going unavailable
+                value_template: >
+                  {# last_reported advances on every report, even an unchanged
+                     one — unlike last_updated, which would make a legitimately
+                     constant reading look frozen. #}
+                  {% if stale_after | int(0) > 0 %}
+                    {% set s = states[illuminance_entity] %}
+                    {{ s is not none
+                       and (now() - s.last_reported).total_seconds() > (stale_after | int * 60) }}
+                  {% else %}
+                    false
+                  {% endif %}
 
 actions: !input dark_actions
