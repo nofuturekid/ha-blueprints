@@ -1,0 +1,191 @@
+blueprint:
+  name: Lights On When Dark
+  description: |
+    Version: 2026.8.0
+
+    Runs actions when it actually gets dark, measured by an illuminance
+    sensor rather than guessed from sun elevation. A dwell time rides out
+    passing clouds, so a single overcast minute does not trigger it.
+
+    Sunset is available as a fallback, but only fires when the sensor is
+    unavailable — otherwise a sensor hosted on a bridge that drops out
+    would silently leave the actions unrun.
+
+    Check how often your sensor actually reports before tuning anything
+    else. This dominates both settings below and is easy to overlook.
+
+    Many battery-powered illuminance sensors are combined presence
+    sensors that send brightness as a by-product of motion, plus a slow
+    cyclic message when nothing moves. Measured on an HmIP-SPI on
+    2026-08-19: every brightness update landed within 7 ms of a motion
+    event, and with nobody around the gap was a flat 10 minutes.
+
+    Two consequences:
+
+    - The threshold is only as sharp as the reporting rate. With a
+      10-minute gap it can be crossed unnoticed for up to 10 minutes.
+      Raise the threshold to compensate: at a dusk decay of roughly
+      8-10 lx per minute, about +50 lx offsets a 5-minute average lag.
+    - The dwell time protects against clouds far less than it looks.
+      Home Assistant holds the last reading until a new one arrives, so
+      a single low value satisfies the dwell on its own — no second,
+      confirming reading is required. It only filters clouds when a
+      fresh higher reading happens to arrive inside the window. On a
+      slow sensor it mostly just adds a fixed delay.
+
+    So: on a fast sensor keep the dwell and a low threshold. On a slow
+    one, shorten the dwell and raise the threshold instead.
+
+    Also check that a motion light on the same sensor cannot switch on
+    before the threshold is crossed, or it will hold the reading up.
+  domain: automation
+  author: NoFutureKid
+  source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/lights_on_dark.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    required_inputs:
+      name: Required parameters
+      icon: mdi:alert-box
+      description: >
+        These inputs are required for the blueprint to function and must be filled in.
+      collapsed: false
+      input:
+        illuminance_entity:
+          name: Illuminance sensor
+          description: >
+            Sensor that measures the ambient brightness. Should sit outside,
+            or at least see daylight without being lit by the lights this
+            automation switches on.
+          selector:
+            entity:
+              multiple: false
+              filter:
+                device_class:
+                  - illuminance
+
+        dark_actions:
+          name: Actions
+          description: >
+            What to run once it is dark. Typically activating a scene, but any
+            actions work.
+          selector:
+            action:
+
+    optional_parameters:
+      name: Optional parameters
+      icon: mdi:star-box-multiple
+      description: >
+        Optional parameters to tune the threshold, the dwell time, the presence
+        requirement and the sunset fallback.
+      collapsed: true
+      input:
+        illuminance_threshold:
+          name: Threshold
+          description: Brightness below which it counts as dark.
+          default: 150
+          selector:
+            number:
+              min: 1
+              max: 1000
+              unit_of_measurement: "lx"
+              mode: slider
+              step: 1
+
+        dwell_time:
+          name: Dwell time
+          description: >
+            How long the sensor has to stay below the threshold before the
+            actions run. Rides out passing clouds.
+          default: 3
+          selector:
+            number:
+              min: 0
+              max: 30
+              unit_of_measurement: "min"
+              mode: slider
+              step: 1
+
+        presence_entity:
+          name: Presence
+          description: >
+            Only run when at least one of these signals somebody is around.
+            Counts as present: state 'on' or 'home', or any number above zero
+            — so a zone works too, since its state is the number of people
+            inside it. zone.home exists in every installation and is the
+            portable choice. Leave empty to run regardless of who is around.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain:
+                    - zone
+                    - person
+                    - binary_sensor
+                    - input_boolean
+
+        use_sunset_fallback:
+          name: Sunset fallback
+          description: >
+            Also run at sunset, but only while the illuminance sensor is
+            unavailable. Protects against a sensor whose bridge drops out.
+          default: true
+          selector:
+            boolean:
+
+mode: single
+
+variables:
+  presence_entity: !input presence_entity
+
+triggers:
+  - trigger: numeric_state
+    entity_id: !input illuminance_entity
+    below: !input illuminance_threshold
+    for:
+      minutes: !input dwell_time
+    id: dark
+
+  - trigger: sun
+    event: sunset
+    id: sunset_fallback
+    enabled: !input use_sunset_fallback
+
+conditions:
+  - condition: template
+    alias: Someone is around, or presence was not configured
+    value_template: >
+      {# An empty presence list means the automation is not gated on presence. #}
+      {% if presence_entity | count == 0 %}
+        true
+      {% else %}
+        {# 'on'/'home' covers binary_sensor, person and input_boolean.
+           A number above zero covers zones, whose state is the head count. #}
+        {% set ns = namespace(present=false) %}
+        {% for e in presence_entity %}
+          {% set s = states(e) %}
+          {% if s in ['on', 'home'] or (s | int(0)) > 0 %}
+            {% set ns.present = true %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.present }}
+      {% endif %}
+
+  - condition: or
+    alias: Darkness measured, or sunset while the sensor is missing
+    conditions:
+      - condition: trigger
+        id: dark
+      - condition: and
+        conditions:
+          - condition: trigger
+            id: sunset_fallback
+          - condition: state
+            alias: Only when the sensor cannot be read
+            entity_id: !input illuminance_entity
+            state:
+              - unavailable
+              - unknown
+
+actions: !input dark_actions
