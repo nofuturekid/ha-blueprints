@@ -1,7 +1,7 @@
 blueprint:
   name: Water Leak Alert
   description: |
-    Version: 2026.8.2
+    Version: 2026.8.3
 
     Sends a one-time notification when a water leak or moisture sensor
     triggers. Separate configuration and texts for leak and moisture
@@ -260,5 +260,11 @@ action:
                         data:
                           tts_text: "{{ water_leak_message }}"
                           media_stream: alarm_stream_max
+                          # Without priority the spoken alert is an ordinary
+                          # FCM message and will not wake a dozing phone. It
+                          # only appeared to work while the notification sent
+                          # just before it happened to hold the device awake.
+                          priority: high
+                          channel: "{{ water_leak_channel }}"
 
 mode: single
