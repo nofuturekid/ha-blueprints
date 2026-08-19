@@ -1,43 +1,19 @@
 blueprint:
   name: Lights On When Dark
   description: |
-    Version: 2026.8.1
+    Version: 2026.8.2
 
     Runs actions when it actually gets dark, measured by an illuminance
-    sensor rather than guessed from sun elevation. A dwell time rides out
-    passing clouds, so a single overcast minute does not trigger it.
+    sensor instead of guessed from sun elevation.
 
-    Sunset is available as a fallback for when the sensor cannot be
-    trusted — see "Stale after" below for the second, nastier way that
-    happens.
+    Check how often your sensor reports before tuning anything else.
+    Many battery sensors send brightness only every few minutes, or
+    only alongside motion. A slow sensor needs a higher threshold and a
+    shorter dwell: with sparse readings the dwell adds delay without
+    filtering clouds.
 
-    Check how often your sensor actually reports before tuning anything
-    else. This dominates both settings below and is easy to overlook.
-
-    Many battery-powered illuminance sensors are combined presence
-    sensors that send brightness as a by-product of motion, plus a slow
-    cyclic message when nothing moves. Measured on an HmIP-SPI on
-    2026-08-19: every brightness update landed within 7 ms of a motion
-    event, and with nobody around the gap was a flat 10 minutes.
-
-    Two consequences:
-
-    - The threshold is only as sharp as the reporting rate. With a
-      10-minute gap it can be crossed unnoticed for up to 10 minutes.
-      Raise the threshold to compensate: at a dusk decay of roughly
-      8-10 lx per minute, about +50 lx offsets a 5-minute average lag.
-    - The dwell time protects against clouds far less than it looks.
-      Home Assistant holds the last reading until a new one arrives, so
-      a single low value satisfies the dwell on its own — no second,
-      confirming reading is required. It only filters clouds when a
-      fresh higher reading happens to arrive inside the window. On a
-      slow sensor it mostly just adds a fixed delay.
-
-    So: on a fast sensor keep the dwell and a low threshold. On a slow
-    one, shorten the dwell and raise the threshold instead.
-
-    Also check that a motion light on the same sensor cannot switch on
-    before the threshold is crossed, or it will hold the reading up.
+    Sunset acts as a fallback whenever the sensor cannot be trusted —
+    unavailable, or silent for longer than "Stale after".
   domain: automation
   author: NoFutureKid
   source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/lights_on_dark.yaml
@@ -54,9 +30,7 @@ blueprint:
         illuminance_entity:
           name: Illuminance sensor
           description: >
-            Sensor that measures the ambient brightness. Should sit outside,
-            or at least see daylight without being lit by the lights this
-            automation switches on.
+            Must not be lit by the lights this automation switches on.
           selector:
             entity:
               multiple: false
@@ -67,8 +41,7 @@ blueprint:
         dark_actions:
           name: Actions
           description: >
-            What to run once it is dark. Typically activating a scene, but any
-            actions work.
+            What to run once it is dark. Typically activating a scene.
           selector:
             action:
 
@@ -95,8 +68,8 @@ blueprint:
         dwell_time:
           name: Dwell time
           description: >
-            How long the sensor has to stay below the threshold before the
-            actions run. Rides out passing clouds.
+            How long it must stay below the threshold. Filters passing clouds,
+            but only on sensors that report often.
           default: 3
           selector:
             number:
@@ -109,11 +82,9 @@ blueprint:
         presence_entity:
           name: Presence
           description: >
-            Only run when at least one of these signals somebody is around.
-            Counts as present: state 'on' or 'home', or any number above zero
-            — so a zone works too, since its state is the number of people
-            inside it. zone.home exists in every installation and is the
-            portable choice. Leave empty to run regardless of who is around.
+            Only run when one of these signals somebody is around: state 'on',
+            'home', or a number above zero, so zone.home works too. Leave empty
+            for no presence check.
           default: []
           selector:
             entity:
@@ -128,8 +99,7 @@ blueprint:
         use_sunset_fallback:
           name: Sunset fallback
           description: >
-            Also run at sunset, but only while the illuminance sensor cannot be
-            trusted. Protects against a sensor whose bridge drops out.
+            Also run at sunset, but only while the sensor cannot be trusted.
           default: true
           selector:
             boolean:
@@ -137,16 +107,10 @@ blueprint:
         stale_after:
           name: Stale after
           description: >
-            Treat the sensor as untrustworthy once its last report is older
-            than this, so the sunset fallback takes over. Guards against the
-            worst failure mode: a sensor that stops transmitting but keeps
-            its last value, so it never goes 'unavailable' and the threshold
-            is never crossed again — nothing runs and nothing looks wrong.
-            Reported for Aqara GZCGQ11LM after 3-6 months of use. Set this to
-            a few times your sensor's normal reporting gap; 0 disables the
-            check. Note it uses last_reported, which is re-stamped on every
-            Home Assistant restart, so a dead sensor looks fresh again right
-            after a restart.
+            Distrust the sensor once its last report is older than this, so the
+            sunset fallback takes over. Catches a sensor that stops sending but
+            keeps its last value. Set to a few times the normal reporting gap;
+            0 disables.
           default: 0
           selector:
             number:
