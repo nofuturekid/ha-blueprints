@@ -1,0 +1,186 @@
+blueprint:
+  name: Climate Schedule
+  description: |
+    # Climate Schedule
+    **Version: 2026.8.0**
+
+    Applies a climate preset at a scheduled time. Use one automation per
+    preset, so day and night can be turned on and off separately.
+
+    <details><summary><b>Details</b></summary>
+
+    Workday switching is optional. Enabled, it picks between two times based on
+    a workday sensor. Disabled, the schedule always runs at "Time", and the
+    second time is ignored.
+
+    For a day and night pair, give the day automation a "today" workday sensor
+    and the night automation a "tomorrow" sensor, so an early start only
+    happens when it is actually needed.
+
+    Each run can optionally turn some switches on and others off.
+
+    </details>
+  domain: automation
+  author: NoFutureKid
+  source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/climate_schedule.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    device:
+      name: Device
+      icon: mdi:air-conditioner
+      input:
+        climate_entity:
+          name: Climate device
+          description: >
+            The climate device this schedule controls.
+          selector:
+            entity:
+              filter:
+                domain: climate
+        hvac_mode:
+          name: HVAC mode
+          description: >
+            Applied every time this schedule runs.
+          default: cool
+          selector:
+            select:
+              options:
+                - "off"
+                - cool
+                - heat
+                - dry
+                - fan_only
+                - auto
+                - heat_cool
+    schedule:
+      name: Schedule
+      icon: mdi:calendar-clock
+      input:
+        time:
+          name: Time
+          description: >
+            When the preset is applied. With workday switching enabled, this is
+            the time used while the workday sensor is "on".
+          selector:
+            time: {}
+        workday_switching:
+          name: Workday switching
+          description: >
+            Run at a second time on days the workday sensor reports as
+            non-working. Leave this disabled if you have no such sensor, or do
+            not want the distinction.
+          default: workday_disabled
+          selector:
+            select:
+              options:
+                - label: Enable workday switching
+                  value: workday_enabled
+                - label: Disable workday switching
+                  value: workday_disabled
+        workday_sensor:
+          name: Workday sensor
+          description: >
+            Binary sensor that is "on" when the day in question is a working
+            day. Pick one. Only used with workday switching enabled.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                domain: binary_sensor
+        time_dayoff:
+          name: Time on days off
+          description: >
+            Used instead of "Time" while the workday sensor is "off". Ignored
+            with workday switching disabled.
+          default: "09:00:00"
+          selector:
+            time: {}
+    preset:
+      name: Preset
+      icon: mdi:thermostat
+      input:
+        temperature:
+          name: Target temperature
+          description: >
+            Target temperature applied by this schedule.
+          default: 21
+          selector:
+            number:
+              min: 12
+              max: 30
+              step: 0.5
+              unit_of_measurement: "°C"
+        switches_on:
+          name: Switches to turn ON (optional)
+          description: >
+            Switches to turn on when this schedule runs.
+          default: []
+          selector:
+            entity:
+              filter:
+                domain: switch
+              multiple: true
+        switches_off:
+          name: Switches to turn OFF (optional)
+          description: >
+            Switches to turn off when this schedule runs.
+          default: []
+          selector:
+            entity:
+              filter:
+                domain: switch
+              multiple: true
+
+mode: single
+
+# !input cannot be used inside a Jinja expression, so the inputs read by the
+# templates below are bound to variables first.
+variables:
+  workday_switching: !input workday_switching
+  workday_sensor: !input workday_sensor
+  switches_on: !input switches_on
+  switches_off: !input switches_off
+
+triggers:
+  - trigger: time
+    at: !input time
+    id: main
+  - trigger: time
+    at: !input time_dayoff
+    id: dayoff
+
+conditions:
+  # Without workday switching only the main time counts, and the second trigger
+  # is discarded here. An enabled switch with no sensor picked is treated the
+  # same way, so a half-filled config keeps running instead of doing nothing.
+  - condition: template
+    value_template: >
+      {% if workday_switching != 'workday_enabled' or workday_sensor | count == 0 %}
+        {{ trigger.id == 'main' }}
+      {% else %}
+        {{ (trigger.id == 'main') == is_state(workday_sensor[0], 'on') }}
+      {% endif %}
+
+actions:
+  - action: climate.set_hvac_mode
+    target:
+      entity_id: !input climate_entity
+    data:
+      hvac_mode: !input hvac_mode
+  - action: climate.set_temperature
+    target:
+      entity_id: !input climate_entity
+    data:
+      temperature: !input temperature
+  - if: "{{ switches_on | count > 0 }}"
+    then:
+      - action: switch.turn_on
+        target:
+          entity_id: "{{ switches_on }}"
+  - if: "{{ switches_off | count > 0 }}"
+    then:
+      - action: switch.turn_off
+        target:
+          entity_id: "{{ switches_off }}"
