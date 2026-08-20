@@ -2,7 +2,7 @@ blueprint:
   name: Climate Schedule
   description: |
     # Climate Schedule
-    **Version: 2026.8.0**
+    **Version: 2026.8.1**
 
     Applies a climate preset at a scheduled time. Use one automation per
     preset, so day and night can be turned on and off separately.
@@ -82,7 +82,8 @@ blueprint:
           name: Workday sensor
           description: >
             Binary sensor that is "on" when the day in question is a working
-            day. Pick one. Only used with workday switching enabled.
+            day. Pick exactly one, and only when workday switching is enabled -
+            it is ignored otherwise.
           default: []
           selector:
             entity:
@@ -135,11 +136,14 @@ blueprint:
 
 mode: single
 
-# !input cannot be used inside a Jinja expression, so the inputs read by the
-# templates below are bound to variables first.
+# !input cannot be used inside a Jinja expression, so the inputs read below are
+# bound to variables first. workday_switching is needed before the triggers are
+# set up, which is what trigger_variables is for.
+trigger_variables:
+  workday_switching: !input workday_switching
+
 variables:
   workday_switching: !input workday_switching
-  workday_sensor: !input workday_sensor
   switches_on: !input switches_on
   switches_off: !input switches_off
 
@@ -150,18 +154,30 @@ triggers:
   - trigger: time
     at: !input time_dayoff
     id: dayoff
+    # Without workday switching there is no second time, so the trigger is not
+    # set up at all rather than being discarded on every run.
+    enabled: "{{ workday_switching == 'workday_enabled' }}"
 
 conditions:
-  # Without workday switching only the main time counts, and the second trigger
-  # is discarded here. An enabled switch with no sensor picked is treated the
-  # same way, so a half-filled config keeps running instead of doing nothing.
-  - condition: template
-    value_template: >
-      {% if workday_switching != 'workday_enabled' or workday_sensor | count == 0 %}
-        {{ trigger.id == 'main' }}
-      {% else %}
-        {{ (trigger.id == 'main') == is_state(workday_sensor[0], 'on') }}
-      {% endif %}
+  # Whole block drops out without workday switching, leaving the automation
+  # unconditional on its single time.
+  - condition: or
+    enabled: "{{ workday_switching == 'workday_enabled' }}"
+    conditions:
+      - condition: and
+        conditions:
+          - condition: trigger
+            id: main
+          - condition: state
+            entity_id: !input workday_sensor
+            state: "on"
+      - condition: and
+        conditions:
+          - condition: trigger
+            id: dayoff
+          - condition: state
+            entity_id: !input workday_sensor
+            state: "off"
 
 actions:
   - action: climate.set_hvac_mode
