@@ -2,7 +2,7 @@ blueprint:
   name: Zone Presence Lights
   description: |
     # Zone Presence Lights
-    **Version: 2026.8.1**
+    **Version: 2026.8.2**
 
     Turns lights on when someone enters a zone and off, after a delay, when the
     zone becomes empty.
@@ -58,11 +58,6 @@ variables:
   zone: !input zone
   delay: !input delay
   include: !input include
-  filtered_lights: >
-    {% set included_areas = include.area_id | map('area_entities') | sum(start=[]) | default([]) %}
-    {% set included_entities = include.entity_id | default([]) %}
-    {% set included_devices = include.device_id | map('device_entities') | sum(start=[]) | default([]) %}
-    {% set included_labels = include.label_id | map('label_entities') | sum(start=[]) | default([]) %}
 
 trigger:
   - trigger: numeric_state
