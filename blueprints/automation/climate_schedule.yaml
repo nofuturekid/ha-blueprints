@@ -2,7 +2,7 @@ blueprint:
   name: Climate Schedule
   description: |
     # Climate Schedule
-    **Version: 2026.8.1**
+    **Version: 2026.8.2**
 
     Applies a climate preset at a scheduled time. Use one automation per
     preset, so day and night can be turned on and off separately.
@@ -159,11 +159,23 @@ triggers:
     enabled: "{{ workday_switching == 'workday_enabled' }}"
 
 conditions:
-  # Whole block drops out without workday switching, leaving the automation
-  # unconditional on its single time.
+  # Deliberately not gated with `enabled:`. That template is evaluated when the
+  # automation is loaded, and only trigger_variables are in scope there - the
+  # variables: block is not. workday_switching came out undefined, the whole
+  # block counted as disabled, and the schedule ran on both times unfiltered.
+  # Runtime conditions do see variables:, so the mode check belongs here.
   - condition: or
-    enabled: "{{ workday_switching == 'workday_enabled' }}"
     conditions:
+      # Without workday switching the dayoff trigger is not set up, so only
+      # "main" can fire. Its id is checked anyway, so that this stays correct
+      # even if the trigger were ever set up regardless.
+      - condition: and
+        conditions:
+          - condition: template
+            value_template: "{{ workday_switching != 'workday_enabled' }}"
+          - condition: trigger
+            id: main
+      # With workday switching, the trigger that fired must match the sensor.
       - condition: and
         conditions:
           - condition: trigger
