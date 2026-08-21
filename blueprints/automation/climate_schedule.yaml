@@ -2,20 +2,24 @@ blueprint:
   name: Climate Schedule
   description: |
     # Climate Schedule
-    **Version: 2026.8.3**
+    **Version: 2026.8.4**
 
     Applies a climate preset at a scheduled time. Use one automation per
     preset, so day and night can be turned on and off separately.
 
     <details><summary><b>Details</b></summary>
 
-    Workday switching is optional. Enabled, it picks between two times based on
-    a workday sensor. Disabled, the schedule always runs at "Time", and the
-    second time is ignored.
+    An alternate time is optional. Enabled, a binary sensor decides which of
+    the two times applies: while it is "on" the schedule runs at "Time", while
+    it is "off" it runs at the alternate time. Disabled, the schedule always
+    runs at "Time".
 
-    For a day and night pair, give the day automation a "today" workday sensor
-    and the night automation a "tomorrow" sensor, so an early start only
-    happens when it is actually needed.
+    Any binary sensor works: a workday sensor, a holiday or vacation toggle, a
+    presence sensor - whatever should shift the schedule.
+
+    For a day and night pair driven by workday sensors, give the day automation
+    a "today" sensor and the night automation a "tomorrow" one, so an early
+    start only happens when it is actually needed.
 
     Each run can optionally turn some switches on and others off.
 
@@ -71,34 +75,38 @@ blueprint:
         time:
           name: Time
           description: >
-            When this schedule runs. With workday switching enabled below, this
-            is the time used on working days.
+            When this schedule runs. With an alternate time enabled below, this
+            is the time used while the deciding sensor is "on".
           selector:
             time: {}
+    # The input keys below still read workday_*: renaming an input key breaks
+    # every automation already built from this blueprint, so only the labels
+    # were generalised. Same for the workday_enabled / workday_disabled values.
     workday:
-      name: Workday switching
-      icon: mdi:calendar-week
+      name: Alternate time
+      icon: mdi:clock-outline
       collapsed: true
       input:
         workday_switching:
-          name: Workday switching
+          name: Enable alternate time
           description: >
-            Run at a second time on days the workday sensor reports as
-            non-working. Leave this disabled if you have no such sensor, or do
-            not want the distinction - the two fields below are then ignored.
+            Run at a second time whenever the deciding sensor is "off". Leave
+            this disabled to always run at "Time" - the two fields below are
+            then ignored.
           default: workday_disabled
           selector:
             select:
               options:
-                - label: Enable workday switching
+                - label: Enabled
                   value: workday_enabled
-                - label: Disable workday switching
+                - label: Disabled
                   value: workday_disabled
         workday_sensor:
-          name: Workday sensor
+          name: Deciding sensor
           description: >
-            Binary sensor that is "on" when the day in question is a working
-            day. Several may be picked, in which case all of them have to agree.
+            Binary sensor that picks the time: "on" runs the schedule at
+            "Time", "off" at the alternate time - a workday sensor, a holiday
+            toggle, anything. Several may be picked, all then have to agree.
           default: []
           selector:
             entity:
@@ -106,9 +114,9 @@ blueprint:
               filter:
                 domain: binary_sensor
         time_dayoff:
-          name: Time on days off
+          name: Alternate time
           description: >
-            Used instead of "Time" while the workday sensor is "off".
+            Used instead of "Time" while the deciding sensor is "off".
           default: "09:00:00"
           selector:
             time: {}
@@ -158,8 +166,8 @@ triggers:
   - trigger: time
     at: !input time_dayoff
     id: dayoff
-    # Without workday switching there is no second time, so the trigger is not
-    # set up at all rather than being discarded on every run.
+    # Without the alternate time there is no second trigger to set up at all,
+    # rather than one that gets discarded on every run.
     enabled: "{{ workday_switching == 'workday_enabled' }}"
 
 conditions:
@@ -170,16 +178,16 @@ conditions:
   # Runtime conditions do see variables:, so the mode check belongs here.
   - condition: or
     conditions:
-      # Without workday switching the dayoff trigger is not set up, so only
-      # "main" can fire. Its id is checked anyway, so that this stays correct
-      # even if the trigger were ever set up regardless.
+      # Without the alternate time the second trigger is not set up, so only
+      # "main" can fire. Its id is checked anyway, so this stays correct even
+      # if the trigger were ever set up regardless.
       - condition: and
         conditions:
           - condition: template
             value_template: "{{ workday_switching != 'workday_enabled' }}"
           - condition: trigger
             id: main
-      # With workday switching, the trigger that fired must match the sensor.
+      # With the alternate time, the trigger that fired must match the sensor.
       - condition: and
         conditions:
           - condition: trigger
