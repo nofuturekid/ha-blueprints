@@ -2,10 +2,14 @@ blueprint:
   name: Lights Off When Away
   description: |
     # Lights Off When Away
-    **Version: 2026.8.1**
+    **Version: 2026.8.2**
 
     Turns off the lights when nobody is home. Entities, areas or labels can be
     excluded, for example to keep fairylights on.
+
+    The trigger can be a presence binary sensor or a zone: a zone's state is
+    the head count, so "nobody home" is the zone reaching zero. Both are
+    accepted and the automation picks whichever applies.
   domain: automation
   author: NoFutureKid
   source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/lights_off_away.yaml
@@ -19,15 +23,19 @@ blueprint:
       input:
         presence_entity:
           name: Trigger
-          description: Trigger(s) for starting the automation.
+          description: >
+            What tells the automation nobody is around: a presence sensor
+            going off, or a zone emptying out.
           selector:
             entity:
               multiple: false
               filter:
-                device_class:
-                  - presence
-                  - occupancy
-                  - motion
+                - domain: zone
+                - domain: binary_sensor
+                  device_class:
+                    - presence
+                    - occupancy
+                    - motion
 
     optional_parameters:
       name: Optional parameters
@@ -38,7 +46,9 @@ blueprint:
       input:
         delay:
           name: Delay
-          description: Time the trigger has to be in 'off' before this fires.
+          description: >
+            How long the trigger has to stay off, or the zone empty, before
+            this fires.
           default: 10
           selector:
             number:
@@ -102,10 +112,18 @@ variables:
     {% set filtered_lights = lights_on | reject('in', excluded_lights) | list %}
     {{ filtered_lights }}
 
+# Two triggers for the two kinds of entity. Only one can ever apply: a
+# binary sensor never holds a number, and a zone never holds "off", so the
+# other trigger simply lies dormant instead of firing wrongly.
 triggers:
   - trigger: state
     entity_id: !input presence_entity
     to: "off"
+    for:
+      minutes: !input delay
+  - trigger: numeric_state
+    entity_id: !input presence_entity
+    below: 1
     for:
       minutes: !input delay
 
