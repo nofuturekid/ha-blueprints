@@ -2,7 +2,7 @@ blueprint:
   name: Climate Schedule
   description: |
     # Climate Schedule
-    **Version: 2026.8.4**
+    **Version: 2026.8.5**
 
     Applies a climate preset at a scheduled time. Use one automation per
     preset, so day and night can be turned on and off separately.
@@ -79,29 +79,26 @@ blueprint:
             is the time used while the deciding sensor is "on".
           selector:
             time: {}
-    # The input keys below still read workday_*: renaming an input key breaks
-    # every automation already built from this blueprint, so only the labels
-    # were generalised. Same for the workday_enabled / workday_disabled values.
-    workday:
+    alternate:
       name: Alternate time
       icon: mdi:clock-outline
       collapsed: true
       input:
-        workday_switching:
+        use_alternate_time:
           name: Enable alternate time
           description: >
             Run at a second time whenever the deciding sensor is "off". Leave
             this disabled to always run at "Time" - the two fields below are
             then ignored.
-          default: workday_disabled
+          default: disabled
           selector:
             select:
               options:
                 - label: Enabled
-                  value: workday_enabled
+                  value: enabled
                 - label: Disabled
-                  value: workday_disabled
-        workday_sensor:
+                  value: disabled
+        deciding_sensor:
           name: Deciding sensor
           description: >
             Binary sensor that picks the time: "on" runs the schedule at
@@ -113,7 +110,7 @@ blueprint:
               multiple: true
               filter:
                 domain: binary_sensor
-        time_dayoff:
+        alternate_time:
           name: Alternate time
           description: >
             Used instead of "Time" while the deciding sensor is "off".
@@ -149,13 +146,13 @@ blueprint:
 mode: single
 
 # !input cannot be used inside a Jinja expression, so the inputs read below are
-# bound to variables first. workday_switching is needed before the triggers are
+# bound to variables first. use_alternate_time is needed before the triggers are
 # set up, which is what trigger_variables is for.
 trigger_variables:
-  workday_switching: !input workday_switching
+  use_alternate_time: !input use_alternate_time
 
 variables:
-  workday_switching: !input workday_switching
+  use_alternate_time: !input use_alternate_time
   switches_on: !input switches_on
   switches_off: !input switches_off
 
@@ -164,16 +161,16 @@ triggers:
     at: !input time
     id: main
   - trigger: time
-    at: !input time_dayoff
-    id: dayoff
+    at: !input alternate_time
+    id: alternate
     # Without the alternate time there is no second trigger to set up at all,
     # rather than one that gets discarded on every run.
-    enabled: "{{ workday_switching == 'workday_enabled' }}"
+    enabled: "{{ use_alternate_time == 'enabled' }}"
 
 conditions:
   # Deliberately not gated with `enabled:`. That template is evaluated when the
   # automation is loaded, and only trigger_variables are in scope there - the
-  # variables: block is not. workday_switching came out undefined, the whole
+  # variables: block is not. use_alternate_time came out undefined, the whole
   # block counted as disabled, and the schedule ran on both times unfiltered.
   # Runtime conditions do see variables:, so the mode check belongs here.
   - condition: or
@@ -184,7 +181,7 @@ conditions:
       - condition: and
         conditions:
           - condition: template
-            value_template: "{{ workday_switching != 'workday_enabled' }}"
+            value_template: "{{ use_alternate_time != 'enabled' }}"
           - condition: trigger
             id: main
       # With the alternate time, the trigger that fired must match the sensor.
@@ -193,14 +190,14 @@ conditions:
           - condition: trigger
             id: main
           - condition: state
-            entity_id: !input workday_sensor
+            entity_id: !input deciding_sensor
             state: "on"
       - condition: and
         conditions:
           - condition: trigger
-            id: dayoff
+            id: alternate
           - condition: state
-            entity_id: !input workday_sensor
+            entity_id: !input deciding_sensor
             state: "off"
 
 actions:
