@@ -2,7 +2,7 @@ blueprint:
   name: Climate Schedule
   description: |
     # Climate Schedule
-    **Version: 2026.8.2**
+    **Version: 2026.8.3**
 
     Applies a climate preset at a scheduled time. Use one automation per
     preset, so day and night can be turned on and off separately.
@@ -26,8 +26,8 @@ blueprint:
   homeassistant:
     min_version: "2024.10.0"
   input:
-    device:
-      name: Device
+    climate:
+      name: Climate
       icon: mdi:air-conditioner
       input:
         climate_entity:
@@ -53,6 +53,17 @@ blueprint:
                 - fan_only
                 - auto
                 - heat_cool
+        temperature:
+          name: Target temperature
+          description: >
+            Applied every time this schedule runs.
+          default: 21
+          selector:
+            number:
+              min: 12
+              max: 30
+              step: 0.5
+              unit_of_measurement: "°C"
     schedule:
       name: Schedule
       icon: mdi:calendar-clock
@@ -60,16 +71,21 @@ blueprint:
         time:
           name: Time
           description: >
-            When the preset is applied. With workday switching enabled, this is
-            the time used while the workday sensor is "on".
+            When this schedule runs. With workday switching enabled below, this
+            is the time used on working days.
           selector:
             time: {}
+    workday:
+      name: Workday switching
+      icon: mdi:calendar-week
+      collapsed: true
+      input:
         workday_switching:
           name: Workday switching
           description: >
             Run at a second time on days the workday sensor reports as
             non-working. Leave this disabled if you have no such sensor, or do
-            not want the distinction.
+            not want the distinction - the two fields below are then ignored.
           default: workday_disabled
           selector:
             select:
@@ -82,8 +98,7 @@ blueprint:
           name: Workday sensor
           description: >
             Binary sensor that is "on" when the day in question is a working
-            day. Pick exactly one, and only when workday switching is enabled -
-            it is ignored otherwise.
+            day. Several may be picked, in which case all of them have to agree.
           default: []
           selector:
             entity:
@@ -93,28 +108,17 @@ blueprint:
         time_dayoff:
           name: Time on days off
           description: >
-            Used instead of "Time" while the workday sensor is "off". Ignored
-            with workday switching disabled.
+            Used instead of "Time" while the workday sensor is "off".
           default: "09:00:00"
           selector:
             time: {}
-    preset:
-      name: Preset
-      icon: mdi:thermostat
+    switches:
+      name: Switches
+      icon: mdi:toggle-switch
+      collapsed: true
       input:
-        temperature:
-          name: Target temperature
-          description: >
-            Target temperature applied by this schedule.
-          default: 21
-          selector:
-            number:
-              min: 12
-              max: 30
-              step: 0.5
-              unit_of_measurement: "°C"
         switches_on:
-          name: Switches to turn ON (optional)
+          name: Switches to turn ON
           description: >
             Switches to turn on when this schedule runs.
           default: []
@@ -124,7 +128,7 @@ blueprint:
                 domain: switch
               multiple: true
         switches_off:
-          name: Switches to turn OFF (optional)
+          name: Switches to turn OFF
           description: >
             Switches to turn off when this schedule runs.
           default: []
