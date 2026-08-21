@@ -2,17 +2,18 @@ blueprint:
   name: Climate Schedule
   description: |
     # Climate Schedule
-    **Version: 2026.8.5**
+    **Version: 2026.8.6**
 
     Applies a climate preset at a scheduled time. Use one automation per
     preset, so day and night can be turned on and off separately.
 
     <details><summary><b>Details</b></summary>
 
-    An alternate time is optional. Enabled, a binary sensor decides which of
-    the two times applies: while it is "on" the schedule runs at "Time", while
-    it is "off" it runs at the alternate time. Disabled, the schedule always
-    runs at "Time".
+    An alternate time is optional. Switched on, a binary sensor decides which
+    of the two times applies - and you pick which way round, because that
+    depends on the sensor: a workday sensor is "on" on the days that want the
+    normal time, a holiday toggle is "on" on the days that want the alternate
+    one. Off by default, the schedule then always runs at "Time".
 
     Any binary sensor works: a workday sensor, a holiday or vacation toggle, a
     presence sensor - whatever should shift the schedule.
@@ -75,8 +76,8 @@ blueprint:
         time:
           name: Time
           description: >
-            When this schedule runs. With an alternate time enabled below, this
-            is the time used while the deciding sensor is "on".
+            When this schedule runs, unless the alternate time below takes
+            over.
           selector:
             time: {}
     alternate:
@@ -85,25 +86,26 @@ blueprint:
       collapsed: true
       input:
         use_alternate_time:
-          name: Enable alternate time
+          name: When to use it
           description: >
-            Run at a second time whenever the deciding sensor is "off". Leave
-            this disabled to always run at "Time" - the two fields below are
-            then ignored.
+            Whether a second time applies at all, and in which sensor state.
+            With "Never" the two fields below are ignored.
           default: disabled
           selector:
             select:
               options:
-                - label: Enabled
-                  value: enabled
-                - label: Disabled
+                - label: Never
                   value: disabled
+                - label: While the deciding sensor is off
+                  value: enabled
+                - label: While the deciding sensor is on
+                  value: enabled_inverted
         deciding_sensor:
           name: Deciding sensor
           description: >
-            Binary sensor that picks the time: "on" runs the schedule at
-            "Time", "off" at the alternate time - a workday sensor, a holiday
-            toggle, anything. Several may be picked, all then have to agree.
+            Binary sensor that decides which of the two times applies; the
+            direction is set above. A workday sensor, a holiday toggle,
+            anything. Several may be picked, all then have to agree.
           default: []
           selector:
             entity:
@@ -113,7 +115,8 @@ blueprint:
         alternate_time:
           name: Alternate time
           description: >
-            Used instead of "Time" while the deciding sensor is "off".
+            Used instead of "Time" while the deciding sensor is in the state
+            picked above.
           default: "09:00:00"
           selector:
             time: {}
@@ -165,7 +168,7 @@ triggers:
     id: alternate
     # Without the alternate time there is no second trigger to set up at all,
     # rather than one that gets discarded on every run.
-    enabled: "{{ use_alternate_time == 'enabled' }}"
+    enabled: "{{ use_alternate_time != 'disabled' }}"
 
 conditions:
   # Deliberately not gated with `enabled:`. That template is evaluated when the
@@ -175,18 +178,20 @@ conditions:
   # Runtime conditions do see variables:, so the mode check belongs here.
   - condition: or
     conditions:
-      # Without the alternate time the second trigger is not set up, so only
-      # "main" can fire. Its id is checked anyway, so this stays correct even
-      # if the trigger were ever set up regardless.
+      # "Never": the second trigger is not set up, so only "main" can fire. Its
+      # id is checked anyway, so this stays correct even if the trigger were
+      # ever set up regardless.
       - condition: and
         conditions:
           - condition: template
-            value_template: "{{ use_alternate_time != 'enabled' }}"
+            value_template: "{{ use_alternate_time == 'disabled' }}"
           - condition: trigger
             id: main
-      # With the alternate time, the trigger that fired must match the sensor.
+      # Alternate while the sensor is off.
       - condition: and
         conditions:
+          - condition: template
+            value_template: "{{ use_alternate_time == 'enabled' }}"
           - condition: trigger
             id: main
           - condition: state
@@ -194,11 +199,32 @@ conditions:
             state: "on"
       - condition: and
         conditions:
+          - condition: template
+            value_template: "{{ use_alternate_time == 'enabled' }}"
           - condition: trigger
             id: alternate
           - condition: state
             entity_id: !input deciding_sensor
             state: "off"
+      # Alternate while the sensor is on.
+      - condition: and
+        conditions:
+          - condition: template
+            value_template: "{{ use_alternate_time == 'enabled_inverted' }}"
+          - condition: trigger
+            id: main
+          - condition: state
+            entity_id: !input deciding_sensor
+            state: "off"
+      - condition: and
+        conditions:
+          - condition: template
+            value_template: "{{ use_alternate_time == 'enabled_inverted' }}"
+          - condition: trigger
+            id: alternate
+          - condition: state
+            entity_id: !input deciding_sensor
+            state: "on"
 
 actions:
   - action: climate.set_hvac_mode
