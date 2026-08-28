@@ -2,7 +2,7 @@ blueprint:
   name: Waste Collection Reminder
   description: |
     # Waste Collection Reminder
-    **Version: 2026.8.1**
+    **Version: 2026.8.2**
 
     Sends a notification ahead of each waste collection, naming the bin that
     is due. Works with any calendar whose events are the collections, such as
@@ -10,10 +10,9 @@ blueprint:
 
     <details><summary><b>How the timing works</b></summary>
 
-    Collections are all-day events, which start at 00:00. The offset is
-    counted from that start, so -11 hours means 13:00 on the day before.
-    Each event triggers on its own: two bins on the same day give two
-    notifications.
+    At the chosen time the calendar is asked for the collections on the day
+    "Days Ahead" from now. One notification lists every bin due that day;
+    nothing is sent when there is none.
 
     </details>
   domain: automation
@@ -49,25 +48,30 @@ blueprint:
       name: "⏰ Timing"
       icon: mdi:clock-outline
       collapsed: true
-      description: When to send the reminder, relative to the start of the collection day.
+      description: When to send the reminder.
       input:
-        offset:
-          name: Offset
-          description: Negative values run before the collection day starts. -11 hours is 13:00 on the day before.
-          default:
-            hours: -11
-            minutes: 0
-            seconds: 0
+        reminder_time:
+          name: Time
+          description: Time of day the reminder is sent
+          default: "13:00:00"
           selector:
-            duration:
-              allow_negative: true
+            time:
+        days_ahead:
+          name: Days Ahead
+          description: Which day to look at. 1 is tomorrow, 0 is today.
+          default: 1
+          selector:
+            number:
+              min: 0
+              max: 7
+              mode: box
 
     # ============= NOTIFICATION =============
     notification_section:
       name: "🔔 Notification"
       icon: mdi:bell-outline
       collapsed: true
-      description: Texts and delivery. "{{ event }}" is replaced by the event title, usually the bin name.
+      description: Texts and delivery. "{{ bins }}" is replaced by the bin names.
       input:
         title:
           name: Title
@@ -76,7 +80,13 @@ blueprint:
             text:
         message:
           name: Message
-          default: "Put out the {{ event }}."
+          default: "Due: {{ bins }}"
+          selector:
+            text:
+        joiner:
+          name: Joiner
+          description: Word between the last two bin names when several are due
+          default: "and"
           selector:
             text:
         channel:
@@ -87,17 +97,36 @@ blueprint:
             text:
 
 trigger:
-  - platform: calendar
-    event: start
-    entity_id: !input calendar
-    offset: !input offset
+  - platform: time
+    at: !input reminder_time
 
 action:
   - variables:
-      event: "{{ trigger.calendar_event.summary }}"
+      days_ahead: !input days_ahead
+      day: "{{ (now() + timedelta(days=days_ahead)).date() }}"
+
+  - service: calendar.get_events
+    target:
+      entity_id: !input calendar
+    data:
+      start_date_time: "{{ day }} 00:00:00"
+      duration:
+        days: 1
+    response_variable: result
+
+  - variables:
+      calendar: !input calendar
+      joiner: !input joiner
+      events: "{{ result[calendar]['events'] }}"
+      bins: >-
+        {% set names = events | map(attribute='summary') | list %}
+        {% if names | length > 1 %}{{ names[:-1] | join(', ') }} {{ joiner }} {{ names[-1] }}{% else %}{{ names | join }}{% endif %}
       title: !input title
       message: !input message
       channel: !input channel
+
+  - condition: template
+    value_template: "{{ events | length > 0 }}"
 
   - repeat:
       for_each: !input notify_devices
@@ -107,10 +136,10 @@ action:
             title: "{{ title }}"
             message: "{{ message }}"
             data:
-              tag: "waste_reminder_{{ event | slugify }}"
+              tag: "waste_reminder"
               notification_icon: "mdi:trash-can-outline"
               channel: "{{ channel }}"
               importance: high
               priority: high
 
-mode: queued
+mode: single
