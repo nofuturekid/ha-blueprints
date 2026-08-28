@@ -1,0 +1,116 @@
+blueprint:
+  name: Waste Collection Reminder
+  description: |
+    # Waste Collection Reminder
+    **Version: 2026.8.1**
+
+    Sends a notification ahead of each waste collection, naming the bin that
+    is due. Works with any calendar whose events are the collections, such as
+    the Waste Collection Schedule integration.
+
+    <details><summary><b>How the timing works</b></summary>
+
+    Collections are all-day events, which start at 00:00. The offset is
+    counted from that start, so -11 hours means 13:00 on the day before.
+    Each event triggers on its own: two bins on the same day give two
+    notifications.
+
+    </details>
+  domain: automation
+  author: NoFutureKid
+  source_url: https://github.com/nofuturekid/ha-blueprints/blob/main/blueprints/automation/waste_reminder.yaml
+  input:
+    # ============= REQUIRED INPUTS =============
+    required_inputs:
+      name: Required Inputs
+      icon: mdi:alert-box
+      collapsed: false
+      description: These inputs are required for the blueprint to function.
+      input:
+        calendar:
+          name: Waste Calendar
+          description: Calendar whose events are the collections
+          selector:
+            entity:
+              filter:
+                - domain: calendar
+
+        notify_devices:
+          name: Notification Devices
+          description: Mobile devices that should receive the reminder (mobile_app integration)
+          selector:
+            device:
+              filter:
+                - integration: mobile_app
+              multiple: true
+
+    # ============= TIMING =============
+    timing_section:
+      name: "⏰ Timing"
+      icon: mdi:clock-outline
+      collapsed: true
+      description: When to send the reminder, relative to the start of the collection day.
+      input:
+        offset:
+          name: Offset
+          description: Negative values run before the collection day starts. -11 hours is 13:00 on the day before.
+          default:
+            hours: -11
+            minutes: 0
+            seconds: 0
+          selector:
+            duration:
+              allow_negative: true
+
+    # ============= NOTIFICATION =============
+    notification_section:
+      name: "🔔 Notification"
+      icon: mdi:bell-outline
+      collapsed: true
+      description: Texts and delivery. "{{ event }}" is replaced by the event title, usually the bin name.
+      input:
+        title:
+          name: Title
+          default: "Waste collection tomorrow"
+          selector:
+            text:
+        message:
+          name: Message
+          default: "Put out the {{ event }}."
+          selector:
+            text:
+        channel:
+          name: Notification Channel
+          description: Android notification channel, so the reminder can get its own sound and importance on the device.
+          default: "Waste"
+          selector:
+            text:
+
+trigger:
+  - platform: calendar
+    event: start
+    entity_id: !input calendar
+    offset: !input offset
+
+action:
+  - variables:
+      event: "{{ trigger.calendar_event.summary }}"
+      title: !input title
+      message: !input message
+      channel: !input channel
+
+  - repeat:
+      for_each: !input notify_devices
+      sequence:
+        - service: notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}
+          data:
+            title: "{{ title }}"
+            message: "{{ message }}"
+            data:
+              tag: "waste_reminder_{{ event | slugify }}"
+              notification_icon: "mdi:trash-can-outline"
+              channel: "{{ channel }}"
+              importance: high
+              priority: high
+
+mode: queued
