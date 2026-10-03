@@ -2,7 +2,7 @@ blueprint:
   name: Water Leak Alert
   description: |
     # Water Leak Alert
-    **Version: 2026.8.4**
+    **Version: 2026.10.0**
 
     Sends a one-time notification when a water leak or moisture sensor triggers,
     with separate settings and texts for each.
@@ -151,6 +151,27 @@ blueprint:
           selector:
             boolean:
 
+    channels_section:
+      name: "📧 Additional Channels"
+      icon: mdi:email-alert
+      collapsed: true
+      description: >
+        Optional second channel next to the mobile devices, for when push does
+        not get through (phone off, out of coverage, app logged out).
+      input:
+        notify_entities:
+          name: Additional notify entities
+          description: >
+            Notify entities that receive every alert as well, with the same
+            title and text, e.g. an e-mail recipient of the SMTP integration.
+            Leave empty to notify the mobile devices only.
+          default: []
+          selector:
+            entity:
+              filter:
+                - domain: notify
+              multiple: true
+
 trigger:
   - platform: state
     entity_id: !input water_leak_sensors
@@ -175,6 +196,7 @@ action:
       moisture_message: !input moisture_message
       moisture_bypass_dnd: !input moisture_bypass_dnd
       moisture_channel: !input moisture_channel
+      notify_entities: !input notify_entities
 
   - choose:
       # MOISTURE ALARM
@@ -214,6 +236,17 @@ action:
                           notification_icon: "mdi:water-percent"
                           importance: high
                           priority: high
+          # Second channel (e.g. e-mail). continue_on_error: a failing mail
+          # server must never hold up the rest of the alert.
+          - if: "{{ notify_entities | count > 0 }}"
+            then:
+              - action: notify.send_message
+                target:
+                  entity_id: !input notify_entities
+                data:
+                  title: "{{ moisture_title }}"
+                  message: "{{ moisture_message }}"
+                continue_on_error: true
       # WATER LEAK ALARM
       - conditions:
           - condition: trigger
@@ -251,6 +284,17 @@ action:
                           notification_icon: "mdi:water-alert"
                           importance: max
                           priority: high
+          # Second channel (e.g. e-mail). continue_on_error: a failing mail
+          # server must never hold up the rest of the alert.
+          - if: "{{ notify_entities | count > 0 }}"
+            then:
+              - action: notify.send_message
+                target:
+                  entity_id: !input notify_entities
+                data:
+                  title: "{{ water_leak_title }}"
+                  message: "{{ water_leak_message }}"
+                continue_on_error: true
           # Spoken alert over the alarm stream - leak only, and audible even
           # when the ringer is silenced. Sent in addition to the notification
           # above, not instead of it.
